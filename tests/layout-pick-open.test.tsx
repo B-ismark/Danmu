@@ -71,7 +71,7 @@ describe('the footprint page', () => {
     // The row's own layout is CSS, asserted in tests/reflow.test.ts.
     render(<LayoutPickPage />);
     const start = screen.getByRole('button', { name: /^Start decorating/ });
-    const photo = screen.getByRole('button', { name: /^Photograph my real room first/ });
+    const photo = screen.getByRole('button', { name: /^Start with photos/ });
     expect(start.parentElement).toBe(photo.parentElement);
     expect(start.parentElement?.classList.contains('action-row')).toBe(true);
   });
@@ -81,9 +81,9 @@ describe('the footprint page', () => {
     window.history.replaceState(null, '', '/onboarding/layout-pick?then=photos');
     try {
       render(<LayoutPickPage />);
-      const photo = await screen.findByRole('button', { name: /^Continue to photos/ });
+      const photo = await screen.findByRole('button', { name: /^Continue$/ });
       expect(photo.className).toContain('ds-btn--accent');
-      const start = screen.getByRole('button', { name: /^Skip photos and start decorating/ });
+      const start = screen.getByRole('button', { name: /^Skip photos$/ });
       expect(start.className).not.toContain('ds-btn--accent');
       // The route has its steps above it, and only this route.
       expect(screen.getByRole('list', { name: 'Steps to your room' })).toBeTruthy();
@@ -101,7 +101,7 @@ describe('the footprint page', () => {
 
   it('arriving any other way, Start decorating leads', () => {
     render(<LayoutPickPage />);
-    const photo = screen.getByRole('button', { name: /^Photograph my real room first/ });
+    const photo = screen.getByRole('button', { name: /^Start with photos/ });
     const start = screen.getByRole('button', { name: /^Start decorating/ });
     expect(start.className).toContain('ds-btn--accent');
     expect(start.compareDocumentPosition(photo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

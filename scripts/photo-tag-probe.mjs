@@ -394,7 +394,7 @@ async function main() {
     await page.screenshot({ path: join(SHOTS, `tags-${vw}.png`) });
 
     // Drawing: no tag takes the press, so a drag that starts on one draws a box.
-    await page.getByRole('button', { name: /Add a piece by hand|Adding by hand/ }).first().click();
+    await page.getByRole('button', { name: /^Add a piece/ }).first().click();
     const drawing = await readTags(page);
     check(
       drawing.tags.every((t) => t.pointerEvents === 'none' && t.xPointerEvents === 'auto'),

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cutByTile, detectionBox, nms, tilesFor, type RawBox } from '../lib/local-detect';
+import { cutByTile, detectionBox, nms, partOfBed, tilesFor, type RawBox } from '../lib/local-detect';
 
 function box(p: Partial<RawBox> = {}): RawBox {
   return {
@@ -159,5 +159,66 @@ describe('detectionBox', () => {
     // …and a small box inside the frame, as before.
     expect(detectionBox(box({ w: 0.01 }))).toBeNull();
     expect(detectionBox(box({ w: 0.011 }))).not.toBeNull();
+  });
+});
+
+/** A corner box [x, y, w, h] as recorded in a field-room run, as a centred RawBox. */
+function fromCorner([x, y, w, h]: number[], p: Partial<RawBox>): RawBox {
+  return box({ x: x + w / 2, y: y + h / 2, w, h, ...p });
+}
+const bed = (b: number[], conf: number) => fromCorner(b, { conf, label: 'Bed', category: 'bed' });
+const sofa = (b: number[], conf: number) => fromCorner(b, { conf, label: 'Sofa', category: 'sofa' });
+
+// Every "sofa" here is a headboard: none of these rooms has a sofa
+// (tests/fixtures/field-rooms/rooms.json). Boxes copied from the recorded runs.
+describe('a headboard is not a sofa', () => {
+  it.each([
+    ['hotel, 1x (a strip)', bed([0.149, 0.595, 0.851, 0.405], 0.75), sofa([0.38, 0.596, 0.27, 0.053], 0.6)],
+    ['hotel, 1x (a longer strip)', bed([0.149, 0.595, 0.851, 0.405], 0.75), sofa([0.38, 0.595, 0.605, 0.054], 0.47)],
+    ['hotel, ultrawide', bed([0.081, 0.519, 0.884, 0.48], 0.88), sofa([0.394, 0.547, 0.256, 0.103], 0.83)],
+    ['seaview suite, ultrawide', bed([0, 0.528, 0.553, 0.472], 0.87), sofa([0.397, 0.548, 0.125, 0.102], 0.47)],
+  ])('%s', (_, b, s) => {
+    const kept = nms([b, s]);
+    expect(kept.map((k) => k.category)).toEqual(['bed']);
+  });
+
+  it('even when the "sofa" outscores the bed', () => {
+    const b = bed([0.081, 0.519, 0.884, 0.48], 0.6);
+    const s = sofa([0.394, 0.547, 0.256, 0.103], 0.9);
+    expect(nms([s, b]).map((k) => k.category)).toEqual(['bed']);
+  });
+
+  it('keeps a sofa at the foot of the bed: it ends where the bed does', () => {
+    const b = bed([0.1, 0.5, 0.8, 0.5], 0.8);
+    const s = sofa([0.3, 0.8, 0.4, 0.2], 0.7);
+    expect(nms([b, s])).toHaveLength(2);
+    // The band is the deciding line, not containment: just past half way is kept.
+    expect(partOfBed(sofa([0.3, 0.6, 0.4, 0.16], 0.7), [b])).toBe(false);
+    expect(partOfBed(sofa([0.3, 0.6, 0.4, 0.14], 0.7), [b])).toBe(true);
+  });
+
+  it('keeps a sofa beside the bed, and a headboard-shaped box of another kind', () => {
+    const b = bed([0.1, 0.5, 0.5, 0.5], 0.8);
+    expect(nms([b, sofa([0.62, 0.5, 0.35, 0.2], 0.7)])).toHaveLength(2);
+    const lamp = fromCorner([0.2, 0.52, 0.06, 0.1], { conf: 0.6, label: 'Lamp', category: 'lamp' });
+    expect(nms([b, lamp])).toHaveLength(2);
+  });
+
+  it('asks only a bed that was kept', () => {
+    // A weak "bed" that lost to an overlapping box takes no sofa with it.
+    const s = sofa([0.3, 0.52, 0.3, 0.1], 0.8);
+    const lostBed = bed([0.1, 0.5, 0.8, 0.5], 0.3);
+    const winner = fromCorner([0.1, 0.5, 0.8, 0.5], { conf: 0.9, label: 'Rug', category: 'rug' });
+    const kept = nms([s, lostBed, winner]);
+    expect(kept.map((k) => k.category).sort()).toEqual(['rug', 'sofa']);
+  });
+
+  it('a dropped headboard makes room under the cap', () => {
+    const b = bed([0, 0.5, 1, 0.5], 0.99);
+    const head = sofa([0.3, 0.5, 0.4, 0.05], 0.98);
+    const rest = Array.from({ length: 11 }, (_, i) => box({ x: 0.04 + i * 0.09, y: 0.1, w: 0.02, h: 0.02, conf: 0.9 - i * 0.01, category: 'lamp', label: 'Lamp' }));
+    const kept = nms([b, head, ...rest]);
+    expect(kept).toHaveLength(12);
+    expect(kept.some((k) => k.category === 'sofa')).toBe(false);
   });
 });

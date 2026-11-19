@@ -289,7 +289,7 @@ function ItemBox({
         type="button"
         disabled={drawing}
         aria-pressed={locked}
-        aria-label={`${cleanLabel}, ${(d.conf * 100).toFixed(0)} percent confident. ${locked ? 'Kept' : 'Not kept'}. Activate to ${locked ? 'stop keeping' : 'keep'} it.`}
+        aria-label={`${cleanLabel}, ${locked ? 'kept' : 'not kept'}. Activate to ${locked ? 'stop keeping' : 'keep'} it.`}
         onPointerDown={(e) => e.stopPropagation()}
         onPointerEnter={() => onHover?.(item.index)}
         onPointerLeave={() => onHover?.(null)}
@@ -394,9 +394,8 @@ function ItemTag({
         >
           {cleanLabel}
         </span>
-        <span className="mono" style={{ opacity: 0.8, flexShrink: 0 }}>
-          · {(d.conf * 100).toFixed(0)}%
-        </span>
+        {/* No confidence percentage: a score is the detector's, not something a person
+            can act on, and "Curtain · 80%" read as a measurement. The row says the rest. */}
         <button
           type="button"
           title={`Remove ${cleanLabel}`}

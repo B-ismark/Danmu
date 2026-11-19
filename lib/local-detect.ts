@@ -290,6 +290,8 @@ async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuff
 /** Bytes so far and bytes in all, across the files of the current download. */
 export type DownloadProgress = { loaded: number; total: number };
 let listener: ((p: DownloadProgress) => void) | null = null;
+/** The one download under way (`downloadDetector`), or null. */
+let inFlight: Promise<boolean> | null = null;
 const progress = new Map<string, DownloadProgress>();
 /** The whole download's size, told up front by the caller (`DetectorStatus.owed`). The
  *  files arrive one after another, so a total summed from the files seen so far read
@@ -300,6 +302,13 @@ let expected = 0;
  *  whole download will be, so the count reads against it from the first byte. */
 export function onDetectorDownload(fn: ((p: DownloadProgress) => void) | null, total = 0): void {
   listener = fn;
+  // A download already under way (started on the photos screen, heard again on the
+  // scan screen) keeps its count: clearing it would restart the bar at zero, and the
+  // second caller's `total` is only what is STILL owed, a smaller number.
+  if (inFlight) {
+    if (fn) report();
+    return;
+  }
   expected = fn ? total : 0;
   progress.clear();
 }
@@ -457,10 +466,25 @@ export async function detectorStatus(pack: DetectorPack): Promise<DetectorStatus
   return { owed, update, kept, size, unreachable };
 }
 
-/** Download `pack` now, verified and kept, without running a scan: Settings'
- *  "Download now", for doing it on Wi-Fi ahead of time. True when every file is
- *  in hand. */
-export async function downloadDetector(pack: DetectorPack): Promise<boolean> {
+/** The download under way, if one is: the photos screen starts it, and the scan
+ *  screen waits on the same one rather than asking again or fetching twice. */
+export function detectorDownloadInFlight(): Promise<boolean> | null {
+  return inFlight;
+}
+
+/** Download `pack` now, verified and kept, without running a scan: the photos
+ *  screen's card, and Settings' "Download now". True when every file is in hand. A
+ *  second call while one is running joins it rather than fetching twice. */
+export function downloadDetector(pack: DetectorPack): Promise<boolean> {
+  if (inFlight) return inFlight;
+  const run = fetchPack(pack).finally(() => {
+    inFlight = null;
+  });
+  inFlight = run;
+  return run;
+}
+
+async function fetchPack(pack: DetectorPack): Promise<boolean> {
   for (const file of packFiles(pack)) {
     const base = await resolveFile(file);
     if (base === null) return false;
@@ -746,9 +770,32 @@ export function nms(boxes: RawBox[]): RawBox[] {
         (k.category === b.category && containedIn(b, k) >= CONTAINED_THRESHOLD),
     );
     if (!dup) keep.push(b);
-    if (keep.length >= MAX_PER_IMAGE) break;
   }
-  return keep;
+  // Ranked, so the first MAX_PER_IMAGE after the bed's own parts are taken out are
+  // the same boxes the old early break kept, plus whichever a dropped part made room for.
+  return keep.filter((b) => !partOfBed(b, keep)).slice(0, MAX_PER_IMAGE);
+}
+
+/** How far down a bed's box a "sofa" may end and still be read as that bed's
+ *  headboard: the upper share of the box, where the headboard and pillows are. */
+const HEADBOARD_BAND = 0.5;
+
+/** A "sofa" box inside a kept bed's box, ending in its upper half, is the bed's
+ *  headboard. A padded headboard with pillows against it is a sofa back as far as
+ *  the model can tell, and the field rooms read one as a sofa in three photos: the
+ *  hotel at both lenses (one at 0.83) and the seaview suite, none of which has a
+ *  sofa. A real sofa at the foot of a bed stands on the floor nearer the lens, so
+ *  its box ends at or below the bed's, and one beside the bed is not inside it.
+ *  Asked of the KEPT bed, never a candidate, so a weak "bed" cannot take a real
+ *  sofa with it. Exported for tests. */
+export function partOfBed(b: RawBox, kept: readonly RawBox[]): boolean {
+  if (b.category !== 'sofa') return false;
+  const bottom = b.y + b.h / 2;
+  return kept.some((bed) => {
+    if (bed.category !== 'bed' || containedIn(b, bed) < CONTAINED_THRESHOLD) return false;
+    const top = bed.y - bed.h / 2;
+    return bottom - top <= HEADBOARD_BAND * bed.h;
+  });
 }
 
 // An InferenceSession rejects overlapping run() calls with "Session already

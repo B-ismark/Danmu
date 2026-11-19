@@ -2720,17 +2720,6 @@ textarea.field { border-radius: var(--r-2); }
 .scan-head__text { max-inline-size: 68ch; }
 .scan-head__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
 .scan-head__lede { margin: 6px 0 0; color: var(--ink-3); font-size: var(--fs-body); line-height: 1.5; }
-.scan-download {
-  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: start;
-  padding: 14px 16px; max-inline-size: 68ch; border-radius: var(--r-3);
-}
-.scan-download__icon {
-  display: grid; place-items: center; inline-size: 36px; block-size: 36px; border-radius: var(--r-full);
-  background: var(--accent-tint); color: var(--accent-text);
-}
-.scan-download__body { display: flex; flex-direction: column; gap: 10px; min-inline-size: 0; }
-.scan-download__title { margin: 0; font-family: var(--font-sans); font-size: var(--fs-lead); font-weight: 700; }
-.scan-download__body > p { margin: 0; font-size: var(--fs-small); line-height: 1.5; color: var(--ink-2); }
 .scan-privacy {
   display: inline-flex; align-items: flex-start; gap: 8px; align-self: flex-start;
   margin: 0; max-inline-size: 68ch; padding: 7px 14px; border-radius: var(--r-full);
@@ -2857,6 +2846,42 @@ textarea.field { border-radius: var(--r-2); }
   animation: ff-say var(--dur-loop) var(--ease-out) calc(var(--i) * var(--ff-beat)) infinite;
 }
 .ff__meta { margin: 0; }
+/* The blocking progress card (components/ui/LoadingOverlay.tsx): the step it is on as
+   a visible title, how far it has got under it, then a picture or a real bar, then one
+   quiet way out — or, when the card is asking, the question's answers. */
+.lo-scrim {
+  position: fixed; inset: 0; z-index: var(--z-overlay); display: grid; place-items: center;
+  padding: 20px; background: var(--scrim);
+}
+.lo-card {
+  inline-size: min(480px, calc(100vw - 32px)); display: flex; flex-direction: column; align-items: center;
+  gap: 10px; padding: 28px 24px 20px; text-align: center; outline: none;
+  background: var(--paper); border: 1px solid var(--hairline); border-radius: var(--r-card); box-shadow: var(--shadow-lift);
+}
+.lo-card__title { margin: 0; font-family: var(--font-display); font-size: var(--fs-title); font-weight: 400; line-height: 1.2; }
+.lo-card__status { min-block-size: 0; }
+.lo-card__desc { margin: 0; color: var(--ink-2); font-size: var(--fs-small); line-height: 1.5; max-inline-size: 40ch; }
+.lo-card__bar { position: relative; inline-size: 100%; block-size: 6px; margin-block: 6px 2px; overflow: hidden; border-radius: var(--r-full); background: var(--paper-3); }
+.lo-card__bar > span {
+  position: absolute; inset: 0; transform-origin: left; border-radius: var(--r-full); background: var(--accent);
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+.lo-card__note {
+  margin: 0; inline-size: 100%; padding: 9px 11px; text-align: start; font-size: var(--fs-small); line-height: 1.5;
+  color: var(--ink-2); background: var(--paper-2); border: 1px solid var(--hairline); border-radius: var(--r-2);
+}
+.lo-card__actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-block-start: 6px; }
+.lo-card__actions:empty { display: none; }
+.lo-card .ff { inline-size: 100%; }
+/* The furniture finder's card on the photos screen: asked before the scan, downloads
+   while photos go in. A row that wraps, so the buttons drop under the words on a phone. */
+.finder-prep {
+  display: flex; flex-wrap: wrap; align-items: flex-start; gap: 10px 12px; margin-block-start: 14px;
+  padding: 12px 14px; background: var(--paper-2); border: 1px solid var(--hairline); border-radius: var(--r-2);
+}
+.finder-prep__body { flex: 1 1 220px; min-inline-size: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--fs-small); color: var(--ink); }
+.finder-prep__actions { display: flex; gap: 6px; flex: 0 0 auto; margin-inline-start: auto; }
+.finder-prep--done { background: var(--success-tint); }
 @keyframes ff-piece { 0%, 90% { opacity: 1; } 100% { opacity: 0; } }
 @keyframes ff-draw { 0% { stroke-dashoffset: 1; } 11% { stroke-dashoffset: 0; } 100% { stroke-dashoffset: 0; } }
 @keyframes ff-tint { 0%, 8% { opacity: 0; } 14% { opacity: 0.5; } 30%, 100% { opacity: 0.16; } }
