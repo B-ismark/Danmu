@@ -444,7 +444,14 @@ export function findRepeats(
     sourceOf(dets[i]) === 'manual' ? 0 : 1,
     keep[i] ? 0 : 1,
     // The same test `geoRefine` sizes a cut axis by, so a box ranked clipped is one
-    // the placers grew.
+    // the placers grew. NOT `footUnseen`, though a foot another piece hides is read the
+    // same way: ranking those rows down too was measured over the hundred and fifty
+    // rooms below and lost pieces — swept at 106° read as 66°, 37 → 47 with no row
+    // ticked, and 15 → 20 read right. A hidden row is swept as far back as the room
+    // lets it, so taken late its sweep lands on a neighbour already standing.
+    //
+    // The rows' own marks are read, here and in the sweep: the screen hands over its
+    // settled list (`settleHiddenFeet`), so a reopened row has its mark back.
     cutByFrame(dets[i].box) ? 1 : 0,
     -(dets[i].box[2] * dets[i].box[3]),
   ];

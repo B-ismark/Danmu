@@ -16,11 +16,24 @@
 // on the tiles with its foot in plain view. Those three boxes are what the detector drew.
 
 import { describe, expect, it } from 'vitest';
-import { markHiddenFeet, OCCLUDER_MIN_HEIGHT_MM, refineDetections } from '@/lib/detect-refine';
-import { judgeLabels } from '@/lib/label-repair';
+import {
+  dedupeDetections,
+  footUnseen,
+  geoPlace,
+  markHiddenFeet,
+  OCCLUDER_MIN_HEIGHT_MM,
+  refineDetections,
+  settleHiddenFeet,
+  withFootHidden,
+} from '@/lib/detect-refine';
+import { candidatesFor, judgeLabels } from '@/lib/label-repair';
+import { suggestFromLabel } from '@/lib/label-suggest';
+import { combinedFloorSpot } from '@/lib/sighting-links';
 import type { Detection } from '@/lib/detection';
 import type { CaptureSlot } from '@/lib/storage';
 import { CAL, CALS, framedBoxFor, ROOM, type Truth } from './helpers/known-room';
+import { boxIn, furnishedRoom, SWEEP_SLOTS } from './helpers/furnished-rooms';
+import type { CalMap } from '@/lib/detect-refine';
 import type { Box } from './helpers/project';
 
 const row = (label: string, category: string, box: Box, slot: CaptureSlot = 'n'): Detection =>
@@ -184,5 +197,153 @@ describe('the mark itself', () => {
     const [same] = markHiddenFeet([bed, stale]).slice(0, 1);
     expect(same).toBe(bed);
     expect(markHiddenFeet([bed, stale])[1]).toBe(stale);
+  });
+});
+
+// ── What the review found: the pieces this rule must not touch ────────────────
+
+describe('what stands on a piece, or is the same piece', () => {
+  it('a table lamp on the nightstand is on it, not behind it', () => {
+    // A lamp's box sits inside its support's with its foot above the support's — every
+    // box test says hidden. It goes on a surface (`seeksSurface`), so it is never marked.
+    const stand: Box = [0.4, 0.55, 0.15, 0.25];
+    const lamp: Box = [0.43, 0.35, 0.08, 0.25];
+    expect(marks([row('nightstand', 'nightstand', stand), row('table lamp', 'lamp', lamp)])).toEqual([false, false]);
+    // The same box called a floor lamp stands on the floor, and is behind it.
+    expect(marks([row('nightstand', 'nightstand', stand), row('floor lamp', 'lamp', lamp)])).toEqual([false, true]);
+  });
+
+  it('a nightstand boxed twice, tight and loose, does not hide itself', () => {
+    const loose: Box = [0.39, 0.39, 0.17, 0.34];
+    const tight: Box = [0.4, 0.4, 0.15, 0.3];
+    expect(marks([row('nightstand', 'nightstand', loose), row('bedside table', 'nightstand', tight)])).toEqual([false, false]);
+    // A different kind over the same box is not the same piece, and does hide it.
+    expect(marks([row('sofa', 'sofa', loose), row('bedside table', 'nightstand', tight)])).toEqual([false, true]);
+  });
+
+  it('one chair behind another of its kind is still hidden, below the same-piece overlap', () => {
+    const front: Box = [0.3, 0.5, 0.2, 0.35];
+    const behindIt: Box = [0.33, 0.4, 0.14, 0.3];
+    expect(marks([row('chair', 'chair', front), row('chair', 'chair', behindIt)])).toEqual([false, true]);
+  });
+});
+
+// ── One reading, wherever a row is read ───────────────────────────────────────
+
+const bedRow = () => row('bed', 'bed', bedBox);
+const nsRow = () => row('bedside table', 'nightstand', behind);
+
+describe('settling the list', () => {
+  it('measures a box drawn by hand above the mattress as hidden', () => {
+    const drawn = geoPlace(nsRow(), CALS, ROOM);
+    expect(drawn.dimMM![0]).toBe(531);
+    const [, settled] = settleHiddenFeet([geoPlace(bedRow(), CALS, ROOM), drawn], CALS, ROOM);
+    expect(settled.footHidden).toBe(true);
+    expect(settled.dimMM![0]).toBe(450);
+    expect(settled.position!.z).toBeCloseTo(-2.8, 3);
+  });
+
+  it('measures the nightstand again when the bed in front of it is deleted', () => {
+    const refined = refineDetections([bedRow(), nsRow()], CALS, ROOM);
+    const [alone] = settleHiddenFeet([refined[1]], CALS, ROOM);
+    expect(alone.footHidden).toBeUndefined();
+    expect(alone.dimMM![0]).toBe(531);
+  });
+
+  it('reads a list reopened from storage — no marks — as it was first read', () => {
+    const refined = refineDetections([bedRow(), nsRow()], CALS, ROOM);
+    const reopened = refined.map((d) => withFootHidden(d, false));
+    expect(settleHiddenFeet(reopened, CALS, ROOM)).toEqual(refined);
+  });
+
+  it('is what refining hands back, after its merge has taken a piece’s occluder away', () => {
+    // The scan marks before its merge, because the merge needs the hidden reading's
+    // doubt. A merge can then take the piece in front into another photo's sighting,
+    // leaving the row behind with nothing in its photo hiding it — and every later
+    // reader marks the merged list. Found by sweeping the furnished-room generator, where
+    // it is rare: one room of 150 at each of five lenses, this one, on a measured 120°,
+    // where a potted plant in the south photo loses the piece in front of it.
+    const lens = (deg: number) => ({ k: 2 * Math.tan(((deg / 2) * Math.PI) / 180), aspect: 4 / 3 });
+    const measured = { ...lens(120), lens: 'measured' as const };
+    const cals: CalMap = { n: measured, e: measured, s: measured, w: measured };
+    const dets: Detection[] = [];
+    for (const p of furnishedRoom(131 * 7919 + 13))
+      for (const s of SWEEP_SLOTS) {
+        const box = boxIn(p, s, lens(120));
+        if (box) dets.push({ label: p.label, conf: 0.9, box, category: p.category, slot: s, shape: p.shape } as Detection);
+      }
+    expect(markHiddenFeet(dets).filter((d) => d.footHidden).map((d) => `${d.label} ${d.slot}`)).toContain('potted plant s');
+    const refined = refineDetections(dets, cals, ROOM);
+    expect(refined.find((d) => d.label === 'potted plant' && d.slot === 's')!.footHidden).toBeUndefined();
+    expect(settleHiddenFeet(refined, cals, ROOM)).toBe(refined);
+  });
+
+  it('hands back the list itself when nothing changes, and refining is already settled', () => {
+    const refined = refineDetections([bedRow(), nsRow()], CALS, ROOM);
+    expect(settleHiddenFeet(refined, CALS, ROOM)).toBe(refined);
+    expect(settleHiddenFeet(refined, CALS, null)).toBe(refined);
+  });
+});
+
+describe('the photo did not show where it stands', () => {
+  it('is what a frame cut at the foot is, and what a hidden foot is', () => {
+    expect(footUnseen(nsRow())).toBe(false);
+    expect(footUnseen({ ...nsRow(), footHidden: true })).toBe(true);
+    expect(footUnseen(row('bed', 'bed', [0.2, 0.5, 0.4, 0.5]))).toBe(true);
+  });
+
+  it('loses the merge to a sighting that saw the foot', () => {
+    // The same nightstand from the north, behind the bed, and from another wall with
+    // its foot in view, read at the same spot. Both were measured; the one that saw
+    // where it stands is the one kept, whichever arrived first.
+    const [, north] = refineDetections([bedRow(), nsRow()], CALS, ROOM);
+    const seen = withFootHidden({ ...north, slot: 'e', box: [0.4, 0.5, 0.1, 0.2] }, false);
+    const measured = new Set([north, seen]);
+    expect(dedupeDetections([north, seen], measured)).toEqual([seen]);
+    expect(dedupeDetections([seen, north], measured)).toEqual([seen]);
+  });
+
+  it('is left out of a linked piece’s combined spot on a measured lens', () => {
+    const lens = { ...CAL, lens: 'measured' as const };
+    const cals = { n: lens, e: lens };
+    const a = { ...nsRow(), position: { x: 0, y: 0, z: -2.9 }, footHidden: true as const };
+    const b = { ...row('bedside table', 'nightstand', [0.4, 0.5, 0.1, 0.2], 'e'), position: { x: 0.2, y: 0, z: -2.7 } };
+    const c = { ...row('bedside table', 'nightstand', [0.4, 0.5, 0.1, 0.2], 'w'), position: { x: 0.4, y: 0, z: -2.5 } };
+    const spot = combinedFloorSpot([b, c, a], { ...cals, w: lens })!;
+    expect(spot.x).toBeCloseTo(0.3, 9);
+    expect(spot.z).toBeCloseTo(-2.6, 9);
+    expect(combinedFloorSpot([b, c, withFootHidden(a, false)], { ...cals, w: lens })!.x).toBeCloseTo(0.2, 9);
+  });
+});
+
+describe('a word offered in its place', () => {
+  it('is measured with its own answer: hidden as a nightstand, as the box shows it as a table lamp', () => {
+    const list = refineDetections([bedRow(), nsRow()], CALS, ROOM);
+    const [same] = candidatesFor(list[1], ['nightstand'], CALS, ROOM, { requireFit: false, among: list });
+    expect(same.detection.footHidden).toBe(true);
+    expect(same.detection.dimMM![0]).toBe(450);
+    const [lamp] = candidatesFor(list[1], ['lamp'], CALS, ROOM, { requireFit: false, shape: 'lamp-table', among: list });
+    expect(lamp.detection.footHidden).toBeUndefined();
+    // With no list, nothing is hidden: the seed is read as the box shows it.
+    const [bare] = candidatesFor(list[1], ['nightstand'], CALS, ROOM, { requireFit: false });
+    expect(bare.detection.footHidden).toBeUndefined();
+    expect(bare.detection.dimMM![0]).toBe(531);
+  });
+
+  it('and the repairs the label check offers are measured the same way', () => {
+    // The nightstand's box called a bed: far too small for one, so the check offers the
+    // words its size could be — each measured against the photo's other rows, so the
+    // nightstand it offers is the one standing behind the bed, at its real width.
+    const [, v] = judgeLabels([bedRow(), row('bed', 'bed', behind)], CALS, ROOM);
+    expect(v.status).toBe('suspect');
+    const offered = v.status === 'suspect' ? v.candidates.find((c) => c.category === 'nightstand') : undefined;
+    expect(offered?.detection.footHidden).toBe(true);
+    expect(offered?.detection.dimMM?.[0]).toBe(450);
+  });
+
+  it('a rename measures the row behind the bed as hidden', () => {
+    const list = refineDetections([bedRow(), nsRow()], CALS, ROOM);
+    const [offer] = suggestFromLabel(list[1], 'Bedside cabinet', CALS, ROOM, list);
+    expect(offer?.detection.footHidden).toBe(true);
   });
 });

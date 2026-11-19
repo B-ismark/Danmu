@@ -22,7 +22,7 @@
 // The caller shows the verdict and the user accepts it.
 
 import { dimRangeFor } from './dimension-ranges';
-import { geoMeasure, markHiddenFeet, measuredPlane, type CalMap, type RoomDims } from './detect-refine';
+import { footHiddenAmong, geoMeasure, markHiddenFeet, measuredPlane, withFootHidden, type CalMap, type RoomDims } from './detect-refine';
 import { cutAxes, type ReadBounds } from './photo-geometry';
 import { CATEGORIES, PART_LIBRARY, refineShape, sceneShapeFor, type Category, type Shape } from './scene-spec';
 import type { Detection } from './detection';
@@ -347,7 +347,7 @@ export function candidatesFor(
   categories: Category[],
   cals: CalMap,
   room: RoomDims,
-  { requireFit = true, shape }: { requireFit?: boolean; shape?: Shape } = {},
+  { requireFit = true, shape, among = [] }: { requireFit?: boolean; shape?: Shape; among?: readonly Detection[] } = {},
 ): LabelCandidate[] {
   const out: LabelCandidate[] = [];
   // No lens, no measurement: `geoMeasure` hands every seed back and nothing is offered.
@@ -381,11 +381,17 @@ export function candidatesFor(
     const tries = named ?? (namesAKind(c, d.label) ? [own] : [own, ...kinds.variants]);
     const trials: Array<LabelCandidate & { fits: boolean; first: boolean }> = [];
     for (const [n, t] of tries.entries()) {
+      // Whether a nearer piece hides its foot is asked again of the kind being tried,
+      // against the photo's other rows (`among`, which holds `d` itself): a nightstand
+      // behind the bed is hidden and the same box as a table lamp is not — a lamp's box
+      // inside another's is standing on it (`markHiddenFeet`). With no list the seed
+      // has no mark, and is read as the box shows it.
       const seed: Detection = { ...d, category: c, shape: t.shape, dimMM: undefined };
-      const { row: trial, bounds } = geoMeasure(seed, cals, room);
+      const marked = withFootHidden(seed, footHiddenAmong(seed, among, d));
+      const { row: trial, bounds } = geoMeasure(marked, cals, room);
       // This kind cannot be measured at all under its own anchor — a ceiling kind
       // with no ceiling in frame. Offering it would mean offering an unmeasured repair.
-      if (trial === seed || !trial.dimMM) continue;
+      if (trial === marked || !trial.dimMM) continue;
       // Re-measured, so check again: changing the word can change the projection, and
       // a candidate that only fitted the old measurement is not a repair. The axis
       // restriction matters — a ceiling candidate is checked on width, because width
@@ -448,8 +454,11 @@ export function candidatesFor(
  *
  *  Judging the AI's OWN dims against the AI's own word would prove nothing: one
  *  model produced both, so they agree by construction. Hence `unmeasured` rather
- *  than a guess. */
-export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVerdict {
+ *  than a guess.
+ *
+ *  `among` is the list `d` was marked on (`judgeLabels` passes it), so the words offered
+ *  in its place are measured with their own answer to whether a nearer piece hides them. */
+export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims, among: readonly Detection[] = []): LabelVerdict {
   const category = (d.category ?? 'other') as Category;
   // The same shape `geoRefine` measures it as, so the range it is judged by is the
   // range of the thing that was measured.
@@ -486,7 +495,7 @@ export function judgeLabel(d: Detection, cals: CalMap, room: RoomDims): LabelVer
   // held to what it saw under its own, in `candidatesFor`. Filtering here on this
   // word's reading took the right word off the chips: a wardrobe called a TV, read on
   // the TV's wall at 2813 mm, was ruled out as a wardrobe (§ 49.5).
-  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes), cals, room);
+  const candidates = candidatesFor(d, categoriesFittingSize(widthMM, heightMM, category, axes), cals, room, { among });
 
   return {
     status: 'suspect',
@@ -511,7 +520,8 @@ export function judgeLabels(dets: Detection[], cals: CalMap, room: RoomDims | nu
   // Whose foot a nearer piece hides is a fact about the whole photo, so it is read off
   // the list here rather than trusted from the row: a row reopened from storage carries
   // no mark, and one whose bed was deleted carries a stale one.
-  return markHiddenFeet(dets).map((d) => judgeLabel(d, cals, room));
+  const marked = markHiddenFeet(dets);
+  return marked.map((d) => judgeLabel(d, cals, room, marked));
 }
 
 /** The fewest pieces a photo must have had read before the photo itself can be

@@ -14,7 +14,7 @@
 // merge, and nothing about the local path should sit behind a module that pulls
 // in the Gemini SDK.
 
-import { anchorFor } from './physics';
+import { anchorFor, seeksSurface } from './physics';
 import {
   AS_READ,
   cutByFrame,
@@ -214,34 +214,103 @@ export const OCCLUDER_MIN_HEIGHT_MM = 300;
  *  whatever else stands on that line of sight: the far one of twin beds, seen past the
  *  near one's corner, was unticked as a repeat of it (§ 49.16's pair).
  *
+ *  **Not something standing ON the nearer piece.** A table lamp on a nightstand, a
+ *  monitor on a desk: its box sits inside its support's, with its foot above the
+ *  support's, and every test above says hidden. It is not behind anything — it is on
+ *  top — so a piece that goes on a surface rather than the floor (`seeksSurface`, read
+ *  at the kind's catalogue size, as the Library places it) is never marked.
+ *
+ *  **Not the same piece boxed twice.** The on-device and cloud lists are marked
+ *  together, before any merge, and a tighter box of one nightstand inside a looser box
+ *  of the same nightstand passes every test too. Two boxes of one kind that overlap as
+ *  much as the merge's own same-object rule asks (`SAME_BOX_IOU`) are one thing there,
+ *  so they are one thing here; below it the merge keeps them as two, and so does this.
+ *
+ *  **Every row on the list can hide another, ticked or not.** A tick says whether the
+ *  person wants a piece in the room, not whether it is in the photograph: an unticked
+ *  bed — one they mean to replace — still stands in front of the nightstand, and a row
+ *  linked as another's sighting is that piece, seen. Deleting a row is how a box is
+ *  said not to be there at all, and a deleted row hides nothing.
+ *
  *  A row whose mark does not change comes back as the same object. */
-export function markHiddenFeet(dets: Detection[]): Detection[] {
-  const tallness = dets.map((d) => {
-    const cat = (d.category ?? 'other') as Category;
-    const shape = sceneShapeFor(cat, d.label, d.shape);
-    return measuredPlane(cat, shape) === 'floor' ? defaultAxisFor(cat, shape, 2) : null;
+export function markHiddenFeet(dets: readonly Detection[]): Detection[] {
+  return dets.map((d, i) => withFootHidden(d, footHiddenIn(d, dets, i)));
+}
+
+/** Whether a nearer piece in `list` hides `row`'s foot — `markHiddenFeet`'s answer for
+ *  one row, for a caller measuring a row the list does not hold: the same box under
+ *  another word, which is what a rename or a repair offers. `self` is the list's own row
+ *  that `row` stands in for, skipped by identity so a box never hides itself. */
+export function footHiddenAmong(row: Detection, list: readonly Detection[], self: Detection = row): boolean {
+  return footHiddenIn(row, list, list.indexOf(self));
+}
+
+/** `d` carrying `hidden` as its mark, or `d` itself when it already does. */
+export function withFootHidden(d: Detection, hidden: boolean): Detection {
+  if (hidden === (d.footHidden === true)) return d;
+  if (hidden) return { ...d, footHidden: true };
+  const { footHidden: _drop, ...rest } = d;
+  void _drop;
+  return rest;
+}
+
+/** A floor row's kind, as the hiding test reads it: its catalogue height, and whether it
+ *  goes on a surface rather than the floor. Null for a row that is not read on the floor. */
+function floorKind(d: Detection): { tall: number; onSurface: boolean } | null {
+  const cat = (d.category ?? 'other') as Category;
+  const shape = sceneShapeFor(cat, d.label, d.shape);
+  if (measuredPlane(cat, shape) !== 'floor') return null;
+  const dims: [number, number, number] = [defaultAxisFor(cat, shape, 0), defaultAxisFor(cat, shape, 1), defaultAxisFor(cat, shape, 2)];
+  return { tall: dims[2], onSurface: seeksSurface(cat, shape, dims) };
+}
+
+function footHiddenIn(d: Detection, list: readonly Detection[], self: number): boolean {
+  const own = floorKind(d);
+  if (!own || own.onSurface) return false;
+  const sides = frameCuts(d.box);
+  if (sides.left || sides.right) return false;
+  const [x, , w] = d.box;
+  const foot = d.box[1] + d.box[3];
+  return list.some((o, j) => {
+    if (j === self || o.slot !== d.slot) return false;
+    const kind = floorKind(o);
+    if (!kind || kind.tall < OCCLUDER_MIN_HEIGHT_MM) return false;
+    if (o.category === d.category && boxIoU(o.box, d.box) >= SAME_BOX_IOU) return false;
+    const [ox, oy, ow, oh] = o.box;
+    if (!(oy + oh > foot + NEARER_BY) || !(oy < foot - INSIDE_BY)) return false;
+    return x >= ox - SPANNED_BY && x + w <= ox + ow + SPANNED_BY;
   });
-  return dets.map((d, i) => {
-    let hidden = false;
-    const sides = frameCuts(d.box);
-    if (tallness[i] !== null && !sides.left && !sides.right) {
-      const [x, , w] = d.box;
-      const foot = d.box[1] + d.box[3];
-      hidden = dets.some((o, j) => {
-        if (j === i || o.slot !== d.slot) return false;
-        const tall = tallness[j];
-        if (tall === null || tall < OCCLUDER_MIN_HEIGHT_MM) return false;
-        const [ox, oy, ow, oh] = o.box;
-        if (!(oy + oh > foot + NEARER_BY) || !(oy < foot - INSIDE_BY)) return false;
-        return x >= ox - SPANNED_BY && x + w <= ox + ow + SPANNED_BY;
-      });
-    }
-    if (hidden === (d.footHidden === true)) return d;
-    if (hidden) return { ...d, footHidden: true };
-    const { footHidden: _drop, ...rest } = d;
-    void _drop;
-    return rest;
+}
+
+/** Whether the photo showed where this row stands: false when the frame cut its foot
+ *  off or a nearer piece hides it. Either way `placeFloorObject` reads the row as far
+ *  back as the room allows, with its sizes as bounds, so nothing that ranks or averages
+ *  sightings may count it as a reading of where the piece is. One predicate, so the
+ *  three places that ask cannot disagree about which rows those are. */
+export function footUnseen(d: Detection): boolean {
+  return cutByFrame(d.box) || d.footHidden === true;
+}
+
+/** The list with every row's mark worked out from the list itself, and each row whose
+ *  mark changed measured again under the new one. Returns `dets` itself when nothing
+ *  changed.
+ *
+ *  A row's place and size depend on the OTHER rows now — on whether a nearer piece
+ *  hides its foot — so a list whose rows change has to be settled again: a box drawn by
+ *  hand above a mattress, a bed deleted from in front of a nightstand, a list reopened
+ *  from storage, which never saves the mark. Everything that measures, judges, compares
+ *  or saves a row reads the settled list, so the size the room builds and the verdict
+ *  beside it come from one reading. A row the geometry cannot measure keeps its place
+ *  and takes only the mark. */
+export function settleHiddenFeet(dets: readonly Detection[], cals: CalMap, room: RoomDims | null): Detection[] {
+  if (!room) return dets as Detection[];
+  let changed = false;
+  const out = markHiddenFeet(dets).map((m, i) => {
+    if (m === dets[i]) return m;
+    changed = true;
+    return geoMeasure(m, cals, room).row;
   });
+  return changed ? out : (dets as Detection[]);
 }
 
 /** WHERE a wall row is, when `geoRefine` could not measure it — position and heading,
@@ -526,7 +595,7 @@ export function dedupeDetections(
  *  for), some of it (the photo's edge cut it off), or all of it. */
 function survivorRank(d: Detection, measured: ReadonlySet<Detection> | undefined): number {
   if (!measured?.has(d)) return 0;
-  return cutByFrame(d.box) ? 1 : 2;
+  return footUnseen(d) ? 1 : 2;
 }
 
 /** Detector output → what the review screen shows. The ORDER is the point.
@@ -559,5 +628,9 @@ export function refineDetections(dets: Detection[], cals: CalMap, room: RoomDims
     if (g.distanceDoubt > 0) doubt.set(g.row, g.distanceDoubt);
     return g.row;
   });
-  return dedupeDetections(placed, measured, doubt);
+  // Marked again on the list that survived the merge, because that is the list every
+  // later reader marks: one whose bed merged into another photo's sighting has nothing
+  // left in front of it, and a reading kept from before the merge would be judged,
+  // compared and saved against a list that cannot explain it.
+  return settleHiddenFeet(dedupeDetections(placed, measured, doubt), cals, room);
 }

@@ -63,6 +63,7 @@ export function suggestFromLabel(
   label: string,
   cals: CalMap,
   room: RoomDims | null,
+  among: readonly Detection[] = [],
 ): LabelCandidate[] {
   const current = sceneShapeFor((d.category ?? 'other') as Category, d.label, d.shape);
   const seen = new Set<Shape>([current]);
@@ -76,7 +77,7 @@ export function suggestFromLabel(
     if (item.category === d.category && libraryScore(label, item.shape) <= currentScore) continue;
     // Measured as exactly this model, named as the Library names it.
     const measured = room
-      ? candidatesFor({ ...d, label: item.label }, [item.category], cals, room, { requireFit: false, shape: item.shape })[0]
+      ? candidatesFor({ ...d, label: item.label }, [item.category], cals, room, { requireFit: false, shape: item.shape, among })[0]
       : undefined;
     out.push(
       measured
