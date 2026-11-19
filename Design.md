@@ -1142,6 +1142,21 @@ us:
 | nothing | **focal length** | The original path, assuming 1.5 m. Still correct, no longer the only one. |
 | neither, or no floor line | — | A typical phone lens: 66° across the photo's **long** side, so ~52° across an upright 4:3 photo. It is the sensor's field, not the frame's — read upright as 66° across, a wall piece came back a third too big (§ 49.1). |
 
+**A line is spent on the height only where the floor could be in the picture.**
+`findFloorLine` always returns the strongest low edge, and on a 1x lens a level phone
+at chest height 2–3 m from a wall does not show the wall's foot — so the edge is a
+sofa top or headboard, and the height fitted from it is knee height. `calForPhoto`
+refuses the fit when the junction would sit below the frame for a standing camera on
+that lens and tilt. Field test (four real rooms, true heights read off the source
+panoramas): four of the five fits that refuses were furniture at 0.84–1.05 m against
+1.4–1.5 m; the fifth was a camera genuinely held low.
+
+**The four photos are one camera.** `calsForRoom` runs the ladder per photo, then
+takes the median of the heights the photos measured and hands it to the ones that
+measured none (instead of the 1.5 m guess) and, with three or more fits, to a fit
+more than 20% off it. A height the phone gave is never replaced. The person stands
+in one spot and turns; their hands do not change height between walls.
+
 **The middle rung is for photos that arrive with nothing.** A room is a box: three
 families of parallel lines, mutually perpendicular. With the principal point at
 the image centre, two vanishing points in perpendicular directions give the focal

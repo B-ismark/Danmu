@@ -22,10 +22,11 @@ import { localDetectorAvailable, localRuntimeMissing, detectLocalAcrossImages, d
 import { megabytes } from '@/lib/model-cache';
 import type { DetectorPack } from '@/lib/model-verify';
 import {
-  calForPhoto,
+  calsForRoom,
   findFloorLine,
   imageAspect,
   type CameraView,
+  type PhotoFacts,
   calibrateFromPhoto,
 } from '@/lib/photo-geometry';
 import { hfovFromFocal35 } from '@/lib/exif';
@@ -127,10 +128,10 @@ const KEY_STEP = 0.02;
 const KEY_MIN = 0.05;
 
 // Per-photo camera calibration: read what each photo can tell, and let
-// `calForPhoto` decide. The ladder itself, and why it is shaped the way it is, lives
+// `calsForRoom` decide. The ladder itself, and why it is shaped the way it is, lives
 // there, beside the equations it chooses between.
 async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> {
-  const map: CalMap = {};
+  const photos: Partial<Record<CaptureSlot, PhotoFacts>> = {};
   for (const e of entries) {
     const aspect = await imageAspect(e.cap.blob);
     const pose = e.cap.pose;
@@ -143,9 +144,10 @@ async function buildCals(entries: SlotEntry[], room: RoomDims): Promise<CalMap> 
     // for an upload whose metadata was stripped somewhere upstream, which is most
     // of them, including anything that went through a messaging app.
     const vanishing = exifHfov === null ? await calibrateFromPhoto(e.cap.blob) : null;
-    map[e.slot] = calForPhoto({ aspect, view, exifHfov, vanishing, floorLine }, e.slot, room.footprint);
+    photos[e.slot] = { aspect, view, exifHfov, vanishing, floorLine };
   }
-  return map;
+  // One person, one spot, one phone height: the photos are read as one camera.
+  return calsForRoom(photos, room.footprint);
 }
 
 // Every outcome of a detect attempt, in the product's own language. Two of these

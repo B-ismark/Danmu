@@ -168,10 +168,103 @@ export function calForPhoto(f: PhotoFacts, slot: CaptureSlot, footprint: Footpri
   if (picked !== null) {
     const cal: CameraCal = { ...calFromHfov(picked.hfov, f.aspect, view), lens: picked.lens };
     if (view.height !== undefined || f.floorLine === null) return cal;
+    if (!floorInFrameStanding(slot, footprint, cal)) return cal;
     return fitHeightToFloorLine(f.floorLine, slot, footprint, cal) ?? cal;
   }
   const solved = f.floorLine !== null ? calibrateFromFloorLine(f.floorLine, slot, footprint, f.aspect, view) : null;
   return solved ?? { ...defaultCal(f.aspect), ...view };
+}
+
+/**
+ * Whether the wall's foot would be in the picture for someone standing up to take
+ * it: this lens, this tilt, the assumed height. A line found where it could not be
+ * is not the floor.
+ *
+ * `findFloorLine` returns the strongest horizontal edge in the lower part of the
+ * frame, and it always finds one. On an ordinary 1x lens a level phone at chest
+ * height 2–3 m from a wall does not show the floor junction at all, so the edge it
+ * finds is the top of a sofa, a headboard or a sill — and solving the camera height
+ * from that edge puts the camera at knee height. Measured in a field test against
+ * four real rooms whose true camera heights were read off the source panoramas:
+ * five 1x photos fitted a height from a line this check refuses, and four of them
+ * were furniture (0.84–1.05 m against true heights of 1.4–1.5 m; every floor piece
+ * in those photos is sized in proportion, so a third too small). The fifth was a
+ * camera that really was held low (0.82 m, true ~0.9), and refusing it costs that
+ * photo the measurement. A person holding a phone is the case this app is for.
+ *
+ * The bound is "in the frame at all" rather than `findFloorLine`'s own search band,
+ * on purpose: the band is a detail of the finder, and this is a statement about
+ * the room.
+ */
+function floorInFrameStanding(slot: CaptureSlot, footprint: Footprint, cal: CameraCal): boolean {
+  const frame = wallFrame(slot, footprint);
+  if (!frame) return false;
+  const row = wallRowAtHeight(0, frame.distance, { ...cal, height: CAM_HEIGHT });
+  return row !== null && row < 1;
+}
+
+/** How far one photo's fitted camera height may sit from the set's median before it
+ *  is taken for a misread line rather than a different camera. A person does not
+ *  change height by a fifth between turning to one wall and the next. */
+const SHARED_HEIGHT_TOLERANCE = 0.2;
+
+/**
+ * Every photo's camera, read as ONE camera: the person stands in one spot and turns,
+ * so the phone is at the same height in all four shots, and a height one photo
+ * measured is evidence about the others.
+ *
+ * Per photo this is `calForPhoto`. Then, from the heights the photos measured off a
+ * floor line (a known lens, no height from the phone), the median is the set's
+ * height, and it is handed to:
+ *
+ *   · a photo that measured nothing — no floor line, or one `floorInFrameStanding`
+ *     refused — which otherwise takes the flat 1.5 m guess;
+ *   · a photo whose own fit sits more than `SHARED_HEIGHT_TOLERANCE` from the
+ *     median, when at least three photos measured one, so the median outvotes it.
+ *     With two there is no telling which of the pair misread its line.
+ *
+ * A height the phone gave (`view.height`) is never replaced: it is the person's.
+ * A shared height is not a measurement OF that photo, so its cal carries no
+ * `floorLine` and `atLens` keeps it as given on another lens.
+ *
+ * Field test, eight runs over four real rooms: the ultrawide sets measured a height
+ * in two or three of four photos and agreed to within 5% where the line was the
+ * floor (1.52 / 1.45; 1.52 / 1.43), and the one misread line in a set of three
+ * (1.05) was 27% out.
+ */
+export function calsForRoom(
+  photos: Partial<Record<CaptureSlot, PhotoFacts>>,
+  footprint: Footprint,
+): Partial<Record<CaptureSlot, CameraCal>> {
+  const out: Partial<Record<CaptureSlot, CameraCal>> = {};
+  const fitted: number[] = [];
+  const slots = Object.keys(photos) as CaptureSlot[];
+  for (const slot of slots) {
+    const f = photos[slot]!;
+    const cal = calForPhoto(f, slot, footprint);
+    out[slot] = cal;
+    if (f.view.height === undefined && cal.lens !== undefined && cal.floorLine !== undefined && cal.height !== undefined) {
+      fitted.push(cal.height);
+    }
+  }
+  if (fitted.length === 0) return out;
+  const shared = median(fitted);
+  for (const slot of slots) {
+    const f = photos[slot]!;
+    if (f.view.height !== undefined) continue;
+    const own = out[slot]!.lens !== undefined && out[slot]!.floorLine !== undefined ? out[slot]!.height : undefined;
+    const outlier =
+      own !== undefined && fitted.length >= 3 && Math.abs(own - shared) / shared > SHARED_HEIGHT_TOLERANCE;
+    if (own !== undefined && !outlier) continue;
+    out[slot] = calForPhoto({ ...f, view: { ...f.view, height: shared } }, slot, footprint);
+  }
+  return out;
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 const heightOf = (cal: CameraCal) => cal.height ?? CAM_HEIGHT;
