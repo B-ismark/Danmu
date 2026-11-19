@@ -230,7 +230,7 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Where:** 3D tab: right-click bare wall (the back walls of the corner view), then the TV, then its *The wall behind it…* row; a sofa (*Keep where it is*); the floor (*Change the floor…*). 2D plan: right-click just outside the wall line behind the TV, then the TV's body; *Add a window here* on a bare wall; *Paint this wall…* with the right rail shut. Phone (375px) and tablet (800px): long-press a wall, then *Paint this wall…*; long-press a sofa that sits against a wall.
 - **Wrong looks like:** the room's menu ("Add from the Library… / Reset the view") on a wall; a wall menu on the TV's own body, or a TV menu on the plaster beyond it; the accent frame on a different wall from the one pressed (the 3D press maps the hit point to the outline, so a wrong frame means the mapping is off); a window landing on the neighbouring wall at a corner; a right-press on a plan wall or piece starting a drag, or hover going dead after a menu closes; on a phone or tablet, *Paint this wall…* or *Change the floor…* closing the menu with no Details sheet or tab coming up, or a long-press on a wall-side sofa opening the wall's menu; a right-click on the skirting board opening the room's menu.
 - **Needs:** any browser for the plan (checked headlessly: every row above opened the menu it should, *Add a window here* added one piece, no page errors); a real GPU for the 3D press (headless reached the wall menu at one point of the corner view only).
-- **Rides:** this branch (`claude/admiring-maxwell-tpa1rj`)
+- **Rides:** `8537887` (B-ismark/Danmu#331)
 
 ## Shell and flow
 
