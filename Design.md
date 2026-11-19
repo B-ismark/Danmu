@@ -431,6 +431,11 @@ Furniture detection runs through a fallback chain, best-effort:
    export). They fail on disjoint classes: OIV7 owns monitors and windows, the
    world model owns fridges / ceiling fans / wardrobes / lamps / curtains. Both
    feed one pool of candidates in normalized space, resolved by a single NMS.
+   That NMS also drops a **headboard read as a sofa** (`partOfBed`): a "sofa" box
+   inside a kept bed’s box that ends in the bed’s upper half. The finder reads a
+   padded headboard with pillows as a sofa back — three photos of the field rooms,
+   none of which has a sofa — while a real sofa at the bed's foot ends where the
+   bed does. The local path only; the cloud path has not shown it.
 
    `resolveFile()` resolves each file's source **independently** — a clone that
    ran the pre-ensemble export script has only the OIV7 model locally, and picks

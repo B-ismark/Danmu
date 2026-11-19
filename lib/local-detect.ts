@@ -770,9 +770,32 @@ export function nms(boxes: RawBox[]): RawBox[] {
         (k.category === b.category && containedIn(b, k) >= CONTAINED_THRESHOLD),
     );
     if (!dup) keep.push(b);
-    if (keep.length >= MAX_PER_IMAGE) break;
   }
-  return keep;
+  // Ranked, so the first MAX_PER_IMAGE after the bed's own parts are taken out are
+  // the same boxes the old early break kept, plus whichever a dropped part made room for.
+  return keep.filter((b) => !partOfBed(b, keep)).slice(0, MAX_PER_IMAGE);
+}
+
+/** How far down a bed's box a "sofa" may end and still be read as that bed's
+ *  headboard: the upper share of the box, where the headboard and pillows are. */
+const HEADBOARD_BAND = 0.5;
+
+/** A "sofa" box inside a kept bed's box, ending in its upper half, is the bed's
+ *  headboard. A padded headboard with pillows against it is a sofa back as far as
+ *  the model can tell, and the field rooms read one as a sofa in three photos: the
+ *  hotel at both lenses (one at 0.83) and the seaview suite, none of which has a
+ *  sofa. A real sofa at the foot of a bed stands on the floor nearer the lens, so
+ *  its box ends at or below the bed's, and one beside the bed is not inside it.
+ *  Asked of the KEPT bed, never a candidate, so a weak "bed" cannot take a real
+ *  sofa with it. Exported for tests. */
+export function partOfBed(b: RawBox, kept: readonly RawBox[]): boolean {
+  if (b.category !== 'sofa') return false;
+  const bottom = b.y + b.h / 2;
+  return kept.some((bed) => {
+    if (bed.category !== 'bed' || containedIn(b, bed) < CONTAINED_THRESHOLD) return false;
+    const top = bed.y - bed.h / 2;
+    return bottom - top <= HEADBOARD_BAND * bed.h;
+  });
 }
 
 // An InferenceSession rejects overlapping run() calls with "Session already
