@@ -233,8 +233,8 @@ Two ways in:
    double-click on a shape starts that shape; a single click picks it and shows it
    beside the size fields.
 2. **Capture flow** — footprint → photograph room → check furniture → studio. Arriving
-   with `?then=photos` the same footprint page leads with *Continue to photos* (the
-   other way on becomes *Skip photos and start decorating*) and every screen on the route
+   with `?then=photos` the same footprint page leads with *Continue* (the
+   other way on becomes *Skip photos*) and every screen on the route
    carries a four-step tracker (`FlowStepper`: Shape · Photos · Furniture · Room). It is
    shown only on this route and its steps are marked done, never linked: the shape page
    MAKES a room, so a link back to it would start a second one.
@@ -372,8 +372,8 @@ EXIF parser and deliberately **not** carried into the decision for that reason.
 > piece is built as (the row's subtitle names it, `sceneShapeFor`) and keeps the piece
 > (`keptAfterPick`), and Enter on the typed text alone is a plain rename. Unticking is
 > still the person's. A row that starts unticked says why, in a note under it: a
-> doubted size reads "Left out: its size in this photo does not fit a …" (and no number),
-> a probable repeat asks "Same … as on …?" with *Yes, same one* / *No, it's another*.
+> doubted size reads "Size doesn’t fit a …. Tick to keep." (and no number),
+> a probable repeat asks "Same … as on …?" with *Same* / *Different*.
 > The photo column is sized by `--scan-photo-w`, published by the page's
 > `ResizeObserver` from the pinned photo's height and aspect, so the rail sits beside
 > the photo rather than a screen away. While it runs the card shows
@@ -593,7 +593,7 @@ Furniture detection runs through a fallback chain, best-effort:
 `lib/repeat-sightings.ts` is the app's *guess* (shared footprint on the floor; boxes in
 one photo that do not touch are two things): a probable repeat starts unticked and asks
 which row it repeats. `lib/sighting-links.ts` is the person's *answer* — a
-**Seen this already?** link on any row, and the hand-over when the kept row goes — set
+**link** icon on any row (it opens a *Same as…* picker in place of the row's note), and the hand-over when the kept row goes — set
 out under **The person can link what the guess missed** in §4. A link adds placement
 only, never size.
 
@@ -774,7 +774,7 @@ five beds, all ticked. `lib/repeat-sightings.ts` is the **soft** half of the sam
 decision and deletes nothing. It asks what a person looking at the list asks —
 *could these two rows be standing in the same spot?* — and answers with the index of
 the row a sighting probably repeats. The review leaves that row unticked and asks
-*Same bed as on Wall 1?* — **Yes, same one** links it (below), **No, it’s another** ticks it back — one tap, which is
+*Same bed as on Wall 1?* — **Same** links it (below), **Different** ticks it back — one tap, which is
 the asymmetry the merge argues for: a real piece that never appears is worse than a
 duplicate, so the duplicate is paid for once on the list rather than in the studio.
 The rule is two facts about rooms, not about detectors:
@@ -802,7 +802,7 @@ disagree about it.
 
 **The person can link what the guess missed** (`lib/sighting-links.ts`). The review
 list follows the wall tab — one wall's pieces beside that wall's photo, with **All
-walls** for the check before Continue — and every row offers *Seen this already?*, a
+walls** for the check before Continue — and every row offers a link icon (*Same as…*), a
 pick of kept pieces (same kind first, other walls first). A link is the later row's
 `sameAs`, the uid of the row it repeats (never an index: a delete re-numbers indices),
 kept one level deep so a bed on three walls is one row with two linked to it. A linked
@@ -942,8 +942,8 @@ the judge's own strict repairs never reach it. The scan screen used to say so on
 width is an estimate* and a *Measured about 1.27 × 0.27 m* sentence. Both are gone: a
 scanned piece is built at an approximate catalogue size (`approximateDims`, rule 2's
 decision of 2026-10-03), so the screen says "typical size" and prints no measurement to
-qualify. A row the judge doubts starts unticked with *Left out: its size in this photo does not
-fit a …. Tick it if it is one* and no number in it. It says SIZE rather than "does not look
+qualify. A row the judge doubts starts unticked with *Size doesn’t fit a …. Tick to keep.*, with no
+number in it. It says SIZE rather than "does not look
 like" because the field test of four real rooms (88 doubted rows) found about a third were
 wrong words and two thirds correctly named pieces read at the wrong size, the photos having
 been taken from doorways and low down rather than the room's centre at chest height. The cut and bounded reasoning below still
@@ -1884,7 +1884,7 @@ it. That is closed now, and it was bigger than the case before it.
 `wallFrame` names a wall rather than a bound: of the walls whose INNER face is turned
 toward this slot's camera and which reach the image's centre column, the nearest, provided
 nothing stands between it and the lens. Measured at the dimensions the layout picker ships
-— reachability is one press, since *"Photograph my real room first"* is offered for
+— reachability is one press, since *"Start with photos"* is offered for
 whichever preset is selected — and printed on every green run:
 
 | preset · slot | box said | the wall is | a 700 × 500 print read |

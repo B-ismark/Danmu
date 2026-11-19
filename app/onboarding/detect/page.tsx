@@ -15,10 +15,11 @@ import { FindingFurniture } from '@/components/ui/FindingFurniture';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { BuildingRoom } from '@/components/ui/BuildingRoom';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
+import { onMeteredConnection } from '@/lib/connection';
 import { Select } from '@/components/ui/Select';
 import { PhotoEditor } from '@/components/studio/PhotoEditor';
 import { isTypingOrDialog } from '@/components/studio/KeyboardShortcuts';
-import { localDetectorAvailable, localRuntimeMissing, detectLocalAcrossImages, detectorStatus, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
+import { localDetectorAvailable, localRuntimeMissing, detectLocalAcrossImages, detectorStatus, detectorDownloadInFlight, onDetectorDownload, type DetectorStatus, type DownloadProgress } from '@/lib/local-detect';
 import { megabytes } from '@/lib/model-cache';
 import type { DetectorPack } from '@/lib/model-verify';
 import {
@@ -67,18 +68,6 @@ const BUILD_MIN_MS = 1200;
  *  — and an in-flight rename — to the row below it. */
 function keyed(items: Detection[]): Detection[] {
   return items.map((d) => (d.uid ? d : { ...d, uid: uuid() }));
-}
-
-/** Whether the browser says this connection is metered: mobile data, or Data Saver on.
- *  Only Chromium reports either, so `false` means "not known to be", never "known not
- *  to be" — the card is careful to say "seem". */
-function onMeteredConnection(): boolean {
-  try {
-    const c = (navigator as unknown as { connection?: { type?: string; saveData?: boolean } }).connection;
-    return !!c && (c.type === 'cellular' || c.saveData === true);
-  } catch {
-    return false;
-  }
 }
 
 // Where the recognising happened. This drives the privacy line, so it has to be
@@ -402,6 +391,14 @@ export default function DetectPage() {
             // One pack, always: the full pair. An old saved 'basic' is ignored rather than
             // honoured, so nobody stays stuck on the smaller, weaker finder.
             const pack: DetectorPack = 'full';
+            // Started on the photos screen and still going: wait for that one, with its
+            // count on the card, rather than asking a question already answered.
+            const pending = detectorDownloadInFlight();
+            if (pending) {
+              onDetectorDownload(setFetched);
+              await pending.catch(() => false);
+              if (cancelled || stopped.current) return;
+            }
             const status = await detectorStatus(pack);
             let go = status.owed === 0;
             const owed = status.owed;
@@ -777,7 +774,7 @@ export default function DetectPage() {
     remember();
     setDetections(next as Detection[]);
     // The row it now repeats is the one the room builds, so it is kept. The picker
-    // only offers kept rows; "Yes, same one" answers the automatic guess, whose target
+    // only offers kept rows; "Same" answers the automatic guess, whose target
     // is ranked by confidence rather than by the ticks and may be unticked — linking to
     // it as it stood would leave both rows out and the piece out of the room.
     const root = linkedTo(next, i);
@@ -1037,21 +1034,22 @@ export default function DetectPage() {
   const privacyLine = sendsPhotos
     ? `To name your furniture, this step sends your ${photoCount === 1 ? 'wall photo' : `${photoCount} wall photos`} to Google once. Nothing else in Danmu leaves your device.`
     : path === 'local'
-      ? 'Found in your browser. Your photos did not leave this device.'
+      ? 'Found on this device. Your photos never left it.'
       : null;
 
   // The one live region on the page: detection can run for tens of seconds, and
   // before this a screen-reader user was told nothing at all when it finished.
   const statusText = running
-    ? `Looking through your ${photoCount === 1 ? 'photo' : `${photoCount} photos`}…`
+    ? 'Scanning your photos…'
     : total === 0
       ? 'No pieces yet'
       : `${keptCount} of ${total} ${total === 1 ? 'piece' : 'pieces'} kept`;
   // The button says what pressing it will build, because the three outcomes differ
   // and only one of them is obvious: kept pieces, an empty room when every row was
   // left out, and the starter arrangement when the list itself is empty.
-  const continueLabel =
-    total === 0
+  const continueLabel = running
+    ? 'Continue'
+    : total === 0
       ? 'Continue to the studio'
       : keptCount === 0
         ? 'Continue with an empty room'
@@ -1113,38 +1111,6 @@ export default function DetectPage() {
             {roughSize ? ' Sizes are rough until you set the room’s size.' : null}
           </p>
         </div>
-        {download && (
-          <section className="ds-card scan-download" aria-labelledby="dl-title">
-            <span className="scan-download__icon" aria-hidden="true">
-              <Icon name="download" size={18} />
-            </span>
-            <div className="scan-download__body">
-            <h2 id="dl-title" className="scan-download__title">
-              {download.update ? 'An improved furniture finder is ready' : 'Find furniture on this device'}
-            </h2>
-            <p className="t-small" style={{ margin: 0, lineHeight: 1.5 }}>
-              {download.update
-                ? 'This version of Danmu finds furniture better than the copy on this device. It is a one-time download, kept afterwards.'
-                : 'To spot your furniture on this device, Danmu needs a one-time download. It is kept afterwards, so later scans use no data.'}{' '}
-              {download.metered ? 'You seem to be on mobile data, so you may want to wait for Wi-Fi.' : null}
-            </p>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(true)}>
-                <Icon name="download" size={13} />
-                {`${download.update ? 'Update' : 'Download'} the furniture finder (${megabytes(download.size.owed)})`}
-              </button>
-              <button className="ds-btn" onClick={() => download.ask(false)}>
-                Skip for now
-              </button>
-            </div>
-            </div>
-          </section>
-        )}
-        {fetched && fetched.total > 0 && fetched.loaded < fetched.total && (
-          <p className="t-small" role="status" style={{ margin: 0 }}>
-            Downloading the furniture finder… {megabytes(fetched.loaded)} of {megabytes(fetched.total)}
-          </p>
-        )}
         {privacyLine && (
           // A padlock only where it is true: on the cloud path the photos do leave.
           <p className="scan-privacy" data-sends={sendsPhotos || undefined}>
@@ -1243,9 +1209,8 @@ export default function DetectPage() {
               <div className="scan-photo-doubt" role="note">
                 <Icon name="info" size={14} />
                 <span>
-                  <b>Most sizes in this photo look off.</b> It may have been taken away from the middle of the
-                  room, or with the phone tilted. Pieces from it are left out until you tick them. For a better
-                  read, retake it standing in the middle, phone upright.
+                  <b>Sizes in this photo look off.</b> It may be tilted or taken off-centre, so its pieces
+                  start unticked. Retake it from the middle of the room, phone upright.
                 </span>
                 <Link href="/onboarding/capture" className="ds-btn ds-btn--sm">
                   <Icon name="camera" size={13} />
@@ -1322,7 +1287,7 @@ export default function DetectPage() {
                 }}
               >
                 <Icon name={adding ? 'check' : 'plus'} size={13} />
-                {adding ? 'Adding by hand' : 'Add a piece by hand'}
+                Add a piece
               </button>
 
               {adding ? (
@@ -1454,17 +1419,49 @@ export default function DetectPage() {
         </div>
       </div>
 
-      {running && (
+      {/* One card for the whole wait, and it always says which step it is on: the
+          download question (asked here, in front, rather than in a card the scan's
+          own veil covered), the download's count, then the scan. */}
+      {running && download && (
+        <LoadingOverlay
+          title={download.update ? 'Update the furniture finder?' : 'Download the furniture finder?'}
+          description={`${megabytes(download.size.owed)}, one time. ${
+            download.update ? 'This version finds furniture better.' : 'It stays on this device, so later scans use no data.'
+          }`}
+          note={download.metered ? 'You seem to be on mobile data. You may want to wait for Wi-Fi.' : undefined}
+          onCancel={stopDetecting}
+          actions={
+            <>
+              <button className="ds-btn" onClick={() => download.ask(false)}>
+                Not now
+              </button>
+              <button className="ds-btn ds-btn--accent" onClick={() => download.ask(true)}>
+                <Icon name="download" size={13} color="var(--on-accent)" />
+                {download.update ? 'Update' : 'Download'}
+              </button>
+            </>
+          }
+        />
+      )}
+      {running && !download && fetched && fetched.total > 0 && fetched.loaded < fetched.total && (
+        <LoadingOverlay
+          title="Getting the furniture finder"
+          description={`${megabytes(fetched.loaded)} of ${megabytes(fetched.total)} · only this once`}
+          progress={fetched.loaded / fetched.total}
+          onCancel={stopDetecting}
+        />
+      )}
+      {running && !download && !(fetched && fetched.total > 0 && fetched.loaded < fetched.total) && (
         <LoadingOverlay
           title="Finding your furniture"
+          description={photoCount === 1 ? 'Reading your wall photo' : `Reading your ${photoCount} wall photos`}
           note={
             sendsPhotos
               ? 'Your wall photos go to Google once for this step. Nothing else leaves your device.'
               : undefined
           }
           onCancel={stopDetecting}
-          cancelLabel="Stop and add by hand"
-          art={<FindingFurniture photos={photoCount} />}
+          art={<FindingFurniture />}
         />
       )}
     </div>

@@ -4,7 +4,7 @@
 // photo (`--piece`), and the screen's one hovered piece (`highlighted`) is drawn the same
 // way on both sides — see `.piece-row` / `.piece-box` in globals.css.
 
-import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { CAPTURE_SLOTS } from '@/lib/capture';
 import type { CaptureSlot } from '@/lib/storage';
 import type { Detection } from '@/lib/detection';
@@ -164,7 +164,7 @@ export function DetectionRow({
   linkOptions: readonly { index: number; label: string }[];
   onLinkTo: (index: number) => void;
   onUnlink: () => void;
-  /** "Yes, same one" on the guessed repeat: link this row to `repeatOf`. */
+  /** "Same" on the guessed repeat: link this row to `repeatOf`. */
   onConfirmRepeat: () => void;
 }) {
   const label = cleanLabelOf(d);
@@ -177,6 +177,8 @@ export function DetectionRow({
   /** The suggestions the name field is showing, so a pick resolves to the same
    *  candidate the person saw rather than one recomputed from a later draft. */
   const shown = useRef<LabelCandidate[]>([]);
+  /** The "same as" picker is open in place of the row's note. */
+  const [linking, setLinking] = useState(false);
   // The MODEL this row becomes, by the studio's own rule (`sceneShapeFor`), named as
   // the Library names it. It said the category, so a row renamed "Shoe rack" still
   // read "Shelf" while the studio was in fact going to build the shoe rack, and a
@@ -220,8 +222,11 @@ export function DetectionRow({
       <span className="piece-row__dot" aria-hidden="true" />
       {/* Was the whole row as a `div onClick`: unreachable by keyboard and with
           no state announced. Now a real toggle with aria-pressed. */}
+      {/* Reads as a checkbox, because that is what it is: an empty box when left out,
+          a ticked fill when kept. It drew a "+" when left out, which reads as "add
+          another", and the list already has a button for that. */}
       <IconButton
-        icon={confirmed ? 'check' : 'plus'}
+        icon="check"
         label={`Keep ${label}`}
         title={keepTitle}
         active={confirmed}
@@ -232,7 +237,7 @@ export function DetectionRow({
         style={
           confirmed
             ? { background: 'var(--locked-tint)', color: 'var(--locked)', borderColor: 'var(--locked)' }
-            : undefined
+            : { color: 'transparent' }
         }
       />
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -268,15 +273,33 @@ export function DetectionRow({
               difference between rows that is theirs to act on. */}
           {[slotLabel(d.slot), sourceLabel(sourceOf(d))].filter(Boolean).join(' · ')}
         </div>
-        {/* Why this row started unticked, when that is the reason. Said rather than
-            acted on — it is still on the list, one tap from kept, because a real
-            piece that never appears is worse than a duplicate. Wraps rather than
-            clips: the sentence is as long as two piece names make it. */}
-        {/* Settled by the person: this row is another view of a piece already on
-            the list, so it is not built. Its tick is that piece's tick, and the line says
-            so too, so the state is readable without going back to the other wall.
-            Unlink makes it its own piece again. */}
-        {sameAs && (
+        {/* ONE line under the name at a time, the most pressing first. A row used to
+            stack a link state, a question, a dropdown, a doubt and an offer, and the
+            list read as a wall of small print. The order: what the person just did
+            (a settled link, a model offer after a rename), then what the app asks
+            (a guessed repeat), then why it started unticked, then what it knows. */}
+        {linking && !sameAs && linkOptions.length > 0 ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 5, maxWidth: 260 }}>
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              <Select
+                value=""
+                onChange={(v) => {
+                  setLinking(false);
+                  onLinkTo(Number(v));
+                }}
+                options={linkOptions.map((o) => ({ value: String(o.index), label: o.label }))}
+                placeholder="Same as…"
+                ariaLabel={`${label} is the same piece as…`}
+                title="Pick the piece this is another view of, and it is built once"
+                height={26}
+                fontSize="var(--fs-caption)"
+              />
+            </div>
+            <IconButton icon="x" label="Cancel" onClick={() => setLinking(false)} size={22} iconSize={11} />
+          </div>
+        ) : sameAs ? (
+          // Settled by the person: another view of a piece already on the list, so it
+          // is not built. Its tick is that piece's tick, and the line says so.
           <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
             <Icon name="link" size={11} style={{ flex: '0 0 auto' }} />
             <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
@@ -293,113 +316,77 @@ export function DetectionRow({
               Unlink
             </button>
           </div>
-        )}
-        {/* The app's guess that this is a repeat, ASKED rather than acted on in
-            silence. It still starts unticked — a guess that is right most of the
-            time should cost nothing when it is — but the person settles it: yes
-            links it, no keeps it as its own piece. Once ticked the question is
-            answered and goes. */}
-        {repeatOf && !sameAs && !confirmed && (
-          <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
-            <Icon name="copy" size={11} style={{ flex: '0 0 auto' }} />
-            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
-              Same {inSentence(cleanLabelOf(repeatOf))} as on {slotLabel(repeatOf.slot)}?
-            </span>
-            <span style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>
-              <button
-                onClick={onConfirmRepeat}
-                className="ds-chip"
-                style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}
-              >
-                Yes, same one
-              </button>
-              <button onClick={onToggle} className="ds-chip" style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}>
-                No, it’s another
-              </button>
-            </span>
-          </div>
-        )}
-        {alsoSeenOn.length > 0 && (
-          <RowNote icon="link">
-            Also seen on {wallList(alsoSeenOn)}{confirmed ? '. Built once' : ''}
-          </RowNote>
-        )}
-        {!sameAs && linkOptions.length > 0 && (
-          <div style={{ marginTop: 5, maxWidth: 220 }}>
-            <Select
-              value=""
-              onChange={(v) => onLinkTo(Number(v))}
-              options={linkOptions.map((o) => ({ value: String(o.index), label: o.label }))}
-              placeholder="Seen this already?"
-              ariaLabel={`${label} is the same piece as…`}
-              title="Already on your list from another wall? Pick it, and this is built once"
-              height={26}
-              fontSize="var(--fs-caption)"
-            />
-          </div>
-        )}
-        {doubted && !repeatOf && !sameAs && !confirmed && (
-          <RowNote icon="info">
-            {photoDoubted
-              ? <>Left out: sizes in this photo look off, so it could not be checked. Tick it if it is a {inSentence(modelName)}</>
-              : <>Left out: its size in this photo does not fit a {inSentence(modelName)}. Tick it if it is one</>}
-          </RowNote>
-        )}
-        {/* A model offered because of the WORD: the user has typed something the
-            model does not match. It is an OFFER — accepting swaps the model, which
-            is built at that model's typical size. */}
-        {offer.length > 0 && (
-          <div
-            className="t-hint"
-            style={{
-              display: 'flex',
-              flexWrap: 'wrap',
-              alignItems: 'center',
-              gap: 6,
-              marginTop: 5,
-              lineHeight: 1.45,
-            }}
-          >
+        ) : offer.length > 0 ? (
+          // A model offered because of the WORD the person typed. Accepting swaps the
+          // model, built at that model's typical size.
+          <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 5, lineHeight: 1.45 }}>
             <span style={{ flex: '1 1 auto', minWidth: 0 }}>
               Still the {categoryLabel(d.category).toLowerCase()} model
             </span>
             {offer.slice(0, 2).map((cand) => (
               <button
-                // Keyed on the MODEL, like the typed list above: a word can reach two
-                // models of one category (floor lamp, table lamp).
+                // Keyed on the MODEL: a word can reach two models of one category.
                 key={cand.detection.shape ?? cand.category}
                 onClick={() => onRepair(cand, true)}
                 className="ds-chip"
                 title={`Use the ${candidateLabel(cand)} model at a typical size`}
-                style={{
-                  height: 22,
-                  fontSize: 'var(--fs-caption)',
-                  padding: '0 8px',
-                  flex: '0 0 auto',
-                }}
+                style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px', flex: '0 0 auto' }}
               >
                 Use {candidateLabel(cand)}
               </button>
             ))}
-            <IconButton
-              icon="x"
-              label="Keep this model"
-              onClick={onDismissOffer}
-              size={22}
-              iconSize={11}
-            />
+            <IconButton icon="x" label="Keep this model" onClick={onDismissOffer} size={22} iconSize={11} />
           </div>
-        )}
+        ) : repeatOf && !confirmed ? (
+          // The app's guess that this is a repeat, ASKED rather than acted on. It
+          // starts unticked; Same links it, Different keeps it as its own piece.
+          <div className="t-hint" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 3, lineHeight: 1.45 }}>
+            <span style={{ flex: '1 1 auto', minWidth: 0, overflowWrap: 'anywhere' }}>
+              Same {inSentence(cleanLabelOf(repeatOf))} as on {slotLabel(repeatOf.slot)}?
+            </span>
+            <span style={{ display: 'inline-flex', gap: 4, flex: '0 0 auto' }}>
+              <button onClick={onConfirmRepeat} className="ds-chip" style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}>
+                Same
+              </button>
+              <button onClick={onToggle} className="ds-chip" style={{ height: 22, fontSize: 'var(--fs-caption)', padding: '0 8px' }}>
+                Different
+              </button>
+            </span>
+          </div>
+        ) : doubted && !confirmed ? (
+          // Why this row started unticked. It names what was measured, the SIZE, and
+          // leaves the person to judge: in the field two thirds of doubted rows were
+          // correctly named pieces read at the wrong size.
+          <RowNote icon="info">
+            {photoDoubted ? 'Sizes in this photo look off. Tick to keep.' : `Size doesn’t fit a ${inSentence(modelName)}. Tick to keep.`}
+          </RowNote>
+        ) : alsoSeenOn.length > 0 ? (
+          <RowNote icon="link">
+            Also seen on {wallList(alsoSeenOn)}{confirmed ? '. Built once' : ''}
+          </RowNote>
+        ) : null}
       </div>
+      {/* Trailing actions are icons, so the name keeps the width. "Show" was a word
+          button and "Seen this already?" a full-width dropdown in the row's body. */}
+      {!sameAs && linkOptions.length > 0 && !linking && (
+        <IconButton
+          icon="link"
+          label={`${label} is already on the list`}
+          title="Already on the list from another wall? Link it, and it is built once"
+          onClick={() => setLinking(true)}
+          size={26}
+          iconSize={12}
+        />
+      )}
       {!onThisPhoto && (
-        <button
+        <IconButton
+          icon="eye"
+          label={`Show ${label} on the ${slotLabel(d.slot).toLowerCase()} photo`}
+          title="Show on its photo"
           onClick={onShow}
-          className="ds-btn ds-btn--xs ds-btn--ghost"
-          aria-label={`Show ${label} on the ${slotLabel(d.slot).toLowerCase()} photo`}
-          style={{ padding: '0 8px', color: 'var(--accent-text)' }}
-        >
-          Show
-        </button>
+          size={26}
+          iconSize={12}
+        />
       )}
       <IconButton
         icon="x"

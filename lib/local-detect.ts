@@ -290,6 +290,8 @@ async function fetchVerifiedBytes(base: string, file: string): Promise<ArrayBuff
 /** Bytes so far and bytes in all, across the files of the current download. */
 export type DownloadProgress = { loaded: number; total: number };
 let listener: ((p: DownloadProgress) => void) | null = null;
+/** The one download under way (`downloadDetector`), or null. */
+let inFlight: Promise<boolean> | null = null;
 const progress = new Map<string, DownloadProgress>();
 /** The whole download's size, told up front by the caller (`DetectorStatus.owed`). The
  *  files arrive one after another, so a total summed from the files seen so far read
@@ -300,6 +302,13 @@ let expected = 0;
  *  whole download will be, so the count reads against it from the first byte. */
 export function onDetectorDownload(fn: ((p: DownloadProgress) => void) | null, total = 0): void {
   listener = fn;
+  // A download already under way (started on the photos screen, heard again on the
+  // scan screen) keeps its count: clearing it would restart the bar at zero, and the
+  // second caller's `total` is only what is STILL owed, a smaller number.
+  if (inFlight) {
+    if (fn) report();
+    return;
+  }
   expected = fn ? total : 0;
   progress.clear();
 }
@@ -457,10 +466,25 @@ export async function detectorStatus(pack: DetectorPack): Promise<DetectorStatus
   return { owed, update, kept, size, unreachable };
 }
 
-/** Download `pack` now, verified and kept, without running a scan: Settings'
- *  "Download now", for doing it on Wi-Fi ahead of time. True when every file is
- *  in hand. */
-export async function downloadDetector(pack: DetectorPack): Promise<boolean> {
+/** The download under way, if one is: the photos screen starts it, and the scan
+ *  screen waits on the same one rather than asking again or fetching twice. */
+export function detectorDownloadInFlight(): Promise<boolean> | null {
+  return inFlight;
+}
+
+/** Download `pack` now, verified and kept, without running a scan: the photos
+ *  screen's card, and Settings' "Download now". True when every file is in hand. A
+ *  second call while one is running joins it rather than fetching twice. */
+export function downloadDetector(pack: DetectorPack): Promise<boolean> {
+  if (inFlight) return inFlight;
+  const run = fetchPack(pack).finally(() => {
+    inFlight = null;
+  });
+  inFlight = run;
+  return run;
+}
+
+async function fetchPack(pack: DetectorPack): Promise<boolean> {
   for (const file of packFiles(pack)) {
     const base = await resolveFile(file);
     if (base === null) return false;

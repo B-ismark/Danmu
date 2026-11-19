@@ -38,6 +38,7 @@ import { formatDim } from '@/lib/units';
 import { Icon } from '@/components/ui/Icon';
 import { Select, type SelectOption } from '@/components/ui/Select';
 import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
+import { FinderPrep } from '@/components/studio/FinderPrep';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { framedWall } from '@/lib/capture-plan';
 import type { CaptureSlot, CapturePose } from '@/lib/storage';
@@ -418,11 +419,9 @@ export default function CapturePage() {
     );
   }
 
-  const forwardLabel = !anyCaptured
-    ? 'Add a photo to continue'
-    : allCaptured
-      ? 'Continue · find my furniture'
-      : `Continue with ${filled} wall${filled > 1 ? 's' : ''}`;
+  // One word. What it leads to is the stepper's next step, and how many walls are in
+  // is the counter beside it; the button used to say both again.
+  const forwardLabel = 'Continue';
 
   const forwardButton = (full?: boolean) => (
     <button
@@ -449,6 +448,7 @@ export default function CapturePage() {
     <div className="capture-head">
       <h1 className="capture-guide__title">Photograph your room</h1>
       <p className="capture-guide__lede">One photo of each wall, taken from the middle of the room.</p>
+      <FinderPrep />
     </div>
   );
   const guide = (
@@ -562,7 +562,7 @@ export default function CapturePage() {
         {/* The mark links here: `persistPhoto` writes every shot to IndexedDB as
             it is taken, so leaving this screen costs nothing. */}
         <FlowBarLead onBack={() => router.back()} markHref="/">
-          <span style={{ fontSize: 'var(--fs-body)', color: 'var(--ink)', fontWeight: 700 }}>Photograph your room</span>
+          {/* No title here: the page's own heading says it, a line below. */}
         </FlowBarLead>
         <span role="status" aria-live="polite" className="t-meta">
           {filled} of 4 walls added
@@ -570,7 +570,7 @@ export default function CapturePage() {
         {flaggedCount > 0 && (
           <Pill tone="warn">
             <Icon name="info" size={11} />
-            {flaggedCount} photo{flaggedCount > 1 ? 's' : ''} could be clearer · retake, or continue anyway
+            {flaggedCount} unclear photo{flaggedCount > 1 ? 's' : ''}
           </Pill>
         )}
         <div className="chrome-bar__spacer" />
@@ -833,7 +833,7 @@ function WallHint({ square }: { square: boolean }) {
     <p className="t-small" style={{ margin: 0, minWidth: 0 }}>
       {square
         ? 'Wrong wall on a photo? Pick the right one under it.'
-        : 'Check each photo against the wall length on it, and pick the right wall under it if it is out.'}
+        : 'Check each photo against its wall length. Wrong wall? Pick the right one under it.'}
     </p>
   );
 }

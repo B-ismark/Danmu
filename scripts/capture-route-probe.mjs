@@ -256,7 +256,7 @@ async function toCapture(page, preset) {
   await radio.click();
   const cta = await one(
     page,
-    page.getByRole('button', { name: /Photograph my real room first/ }),
+    page.getByRole('button', { name: /^Start with photos$/ }),
     'the photograph-first CTA',
   );
   await cta.click();
@@ -319,7 +319,7 @@ async function spans(page) {
 async function measureByHand(page, wallLabel) {
   const go = await one(
     page,
-    page.getByRole('button', { name: /Continue (with|·)/ }),
+    page.getByRole('button', { name: /^Continue$/ }),
     'the continue-to-detect button',
   );
   await go.click();
@@ -364,7 +364,7 @@ async function measureByHand(page, wallLabel) {
   }
   if (reads !== 'Door') throw new Error(`could not set the category to Door — it reads "${reads}"`);
 
-  const arm = page.getByRole('button', { name: /Add a piece by hand|Adding by hand/ });
+  const arm = page.getByRole('button', { name: /^Add a piece/ });
   if (await arm.count()) {
     const pressed = await arm.first().getAttribute('aria-pressed');
     if (pressed !== 'true') await arm.first().click();
@@ -428,7 +428,7 @@ async function main() {
       await start.click();
       await page.waitForURL('**/onboarding/layout-pick', { timeout: 20000 });
       await toCapture(page, 'T-Shape');
-      ok('S1', 'rooms (empty) → layout-pick → T-Shape → "Photograph my real room first" → capture');
+      ok('S1', 'rooms (empty) → layout-pick → T-Shape → "Start with photos" → capture');
       await shot(page, 'S1-capture-empty');
     } catch (e) {
       no('S1', `the route does not walk: ${e.message}`);

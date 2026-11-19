@@ -50,22 +50,22 @@ describe('DetectionRow — same piece', () => {
     const no = vi.fn();
     render(<DetectionRow {...props({ repeatOf: bedN, onConfirmRepeat: yes, onToggle: no })} />);
     expect(screen.getByText('Same bed as on Wall 1?')).toBeTruthy();
-    fireEvent.click(screen.getByText('Yes, same one'));
+    fireEvent.click(screen.getByText('Same'));
     expect(yes).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByText('No, it’s another'));
+    fireEvent.click(screen.getByText('Different'));
     expect(no).toHaveBeenCalledTimes(1);
   });
 
   it('stops asking once the row is kept', () => {
     render(<DetectionRow {...props({ repeatOf: bedN, confirmed: true })} />);
-    expect(screen.queryByText('Yes, same one')).toBeNull();
+    expect(screen.queryByText('Same')).toBeNull();
   });
 
   it('shows a settled link instead of the question, with Unlink', () => {
     const unlink = vi.fn();
     render(<DetectionRow {...props({ repeatOf: bedN, sameAs: bedN, onUnlink: unlink })} />);
     expect(screen.getByText(/^Same bed as on Wall 1/)).toBeTruthy();
-    expect(screen.queryByText('Yes, same one')).toBeNull();
+    expect(screen.queryByText('Same')).toBeNull();
     fireEvent.click(screen.getByText('Unlink'));
     expect(unlink).toHaveBeenCalledTimes(1);
   });
@@ -91,20 +91,24 @@ describe('DetectionRow — same piece', () => {
     expect(screen.getByText(/Also seen on Wall 2 and Wall 3/)).toBeTruthy();
   });
 
-  it('offers "Seen this already?" only when there is something to pick, and never on a linked row', () => {
+  // The picker sits behind a link icon now, not a full-width dropdown in every row:
+  // the person asked for rows that are not crowded. Same rule as before about when.
+  const linkBtn = () => screen.queryByRole('button', { name: 'bed is already on the list' });
+  it('offers the link only when there is something to pick, and never on a linked row', () => {
     const opts = [{ index: 0, label: 'bed · Wall 1' }];
     const { rerender } = render(<DetectionRow {...props()} />);
-    expect(screen.queryByText('Seen this already?')).toBeNull();
+    expect(linkBtn()).toBeNull();
     rerender(<DetectionRow {...props({ linkOptions: opts })} />);
-    expect(screen.getByText('Seen this already?')).toBeTruthy();
+    expect(linkBtn()).toBeTruthy();
     rerender(<DetectionRow {...props({ linkOptions: opts, sameAs: bedN })} />);
-    expect(screen.queryByText('Seen this already?')).toBeNull();
+    expect(linkBtn()).toBeNull();
   });
 
   it('links to the row picked from the list', () => {
     const link = vi.fn();
     render(<DetectionRow {...props({ linkOptions: [{ index: 0, label: 'bed · Wall 1' }], onLinkTo: link })} />);
-    fireEvent.click(screen.getByText('Seen this already?'));
+    fireEvent.click(linkBtn()!);
+    fireEvent.click(screen.getByText('Same as…'));
     fireEvent.click(screen.getByText('bed · Wall 1'));
     expect(link).toHaveBeenCalledWith(0);
   });

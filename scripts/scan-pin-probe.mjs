@@ -19,12 +19,12 @@
 //     the list is on screen and not under it, and that no box between the photo and the
 //     page can scroll on its own, which would take a swipe for itself;
 //   · walks keyboard focus back up the list and checks none of it lands under the photo;
-//   · turns on "Add a piece by hand", which grows the tool row, and checks the photo is
+//   · turns on "Add a piece", which grows the tool row, and checks the photo is
 //     still whole with nothing scrolling on its own, and that "Place with the keyboard",
 //     which focuses a button in the pinned column, leaves the page where it was;
 //   · on a touch screen, swipes up starting ON the photo while nothing is being drawn,
 //     and checks the page scrolled;
-//   · turns on "Add a piece by hand" and drags on the photo, and checks that drew a box
+//   · turns on "Add a piece" and drags on the photo, and checks that drew a box
 //     rather than scrolling the page;
 //   · checks the page does not scroll sideways.
 //
@@ -288,7 +288,7 @@ async function main() {
     // would move the very page this is watching.
     const press = (name) =>
       page.evaluate((name) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === name).click(), name);
-    await press('Add a piece by hand');
+    await press('Add a piece');
     await page.evaluate(() => window.scrollTo(0, document.scrollingElement.scrollHeight));
     await page.waitForTimeout(300);
     const adding = await read(page);
@@ -308,7 +308,7 @@ async function main() {
       `placing with the keyboard focuses "Add this box" and leaves the page where it was (${Math.round(adding.scrollY)} → ${Math.round(placing.scrollY)}px)`,
     );
     await page.keyboard.press('Escape');
-    await press('Adding by hand');
+    await press('Add a piece');
 
     if (touch) {
       // A swipe that starts on the photo, with nothing being drawn, is a scroll. The
@@ -343,7 +343,7 @@ async function main() {
       );
 
       // …and while adding by hand, the same finger draws a box instead.
-      await page.getByRole('button', { name: 'Add a piece by hand' }).click();
+      await page.getByRole('button', { name: 'Add a piece' }).click();
       await page.evaluate(() => document.querySelector('img[alt^="Your photo"]').scrollIntoView({ block: 'center' }));
       await page.waitForTimeout(200);
       const before = await read(page);

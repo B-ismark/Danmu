@@ -273,16 +273,22 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Rides:** `91f1f6a` (B-ismark/Danmu#150), `c2137c4` (B-ismark/Danmu#157)
 
 ### Does the rebuilt room look like the room
-- **Where:** any preset → *Photograph my real room first* → four real photos → detect → **Continue**.
+- **Where:** any preset → *Start with photos* → four real photos → detect → **Continue**.
 - **Wrong looks like:** pieces on the wrong wall or out of proportion with the real room.
 - **Needs:** a real scan with photos, and a person's judgement.
 - **Rides:** `e6cd8f4` (B-ismark/Danmu#154)
 
 ### Detect review: kept pieces, a bed seen twice, linking by hand
-- **Where:** detect screen. Untick rows with ✓/+, then **Continue with N pieces**, and also untick everything. Photograph a bed on two walls: the repeat starts unticked and asks *"Same bed as on Wall 1?"*. On the second wall's tab open the bed row's **Seen this already?** and pick Wall 1's bed; check **All walls**, Continue; untick or delete either bed, then tick it again.
+- **Where:** detect screen. Untick rows with their checkbox, then **Continue with N pieces**, and also untick everything. Photograph a bed on two walls: the repeat starts unticked and asks *"Same bed as on Wall 1?"*. On the second wall's tab press the bed row's **link** icon, open *Same as…* and pick Wall 1's bed; check **All walls**, Continue; untick or delete either bed, then tick it again.
 - **Wrong looks like:** a left-out piece in the studio, or a kept one missing; + reading as "add new"; two ticked beds, two beds or none, or a bed somewhere neither photo shows; the picker offering a linked piece or the row itself; the walls disagreeing on kept or left out; the caption naming the wrong wall, clipped at 360px, or *"Same the bed"*; an old room opening with pieces missing.
 - **Needs:** a real scan with photos, at phone width.
 - **Rides:** `fdd1f20` (B-ismark/Danmu#160), `420576e` (B-ismark/Danmu#260), `7c33c43` (B-ismark/Danmu#263)
+
+### The capture flow's cards and buttons
+- **Where:** a fresh browser profile: Rooms → any shape → *Start with photos*. Download the finder from the card under the heading, add photos while it runs, Continue. Then on the detect screen: a row with a repeat, a doubted size and a link, at 390px and 1440px. Also *Later* on the card, then Continue (the scan screen asks instead).
+- **Wrong looks like:** the card's bar stuck or restarting at zero on the scan screen; the scan screen asking to download again after the card finished; a dialog with no visible step name; a row carrying two notes at once; the link icon, eye and × crowding the name at 360px; the empty checkbox reading as a button with nothing on it.
+- **Needs:** any browser, a fresh profile, a real scan with photos, at phone width.
+- **Rides:** this branch (`claude/friendly-maxwell-cep4vz`)
 
 ### Paper colour and the room size hints
 - **Where:** light mode on a real display, with pale wall colours in 3D. Resize a rug past the room in the Inspector. Drag a room's width down to its largest piece.
