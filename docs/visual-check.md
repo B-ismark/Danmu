@@ -272,12 +272,6 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Needs:** a real scan with photos, at phone width.
 - **Rides:** `fdd1f20` (B-ismark/Danmu#160), `420576e` (B-ismark/Danmu#260), `7c33c43` (B-ismark/Danmu#263)
 
-### Scanned pieces sit where the photo shows them
-- **Where:** scan a room with a wardrobe or sofa against a wall, a print or mirror near a corner shared by two photos, a wardrobe/curtain/bookcase running off the frame, a plant/floor lamp/stool cut by the frame side, a dining table with chairs both sides, and an ottoman beside a coffee table with a tray on it. Check 3D, 2D Plan and Room check against the photo; count chair rows.
-- **Wrong looks like:** a floor piece's back through the plaster or a hand's width off the wall; a corner piece on the wrong wall; a high wall fixture as a ceiling light; a cut piece as a sliver, growing through a side wall or away from the side the photo saw; a round piece out in the room; fewer chair rows than chairs, an unticked chair naming the wrong twin; an ottoman (or a stool/armchair listed as *Other*) in the air, on the tabletop, or overlapping the table with Room check silent.
-- **Needs:** a real scan with photos.
-- **Rides:** `17f9d62` (B-ismark/Danmu#148), `e998926` (B-ismark/Danmu#164), `0aa19b2` (B-ismark/Danmu#195), `0fb6a27` (B-ismark/Danmu#180)
-
 ### Paper colour and the room size hints
 - **Where:** light mode on a real display, with pale wall colours in 3D. Resize a rug past the room in the Inspector. Drag a room's width down to its largest piece.
 - **Wrong looks like:** paper reading grey or yellow. The hint saying the rug "needs" the room's width instead of saying it does not fit. The size sentence appearing before the floor is reached.
@@ -307,12 +301,6 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Wrong looks like:** the duplicate missing, the width reverted, or a half-saved room (new width, old outline).
 - **Needs:** a real phone, plus desktop Safari.
 - **Rides:** `31bac6a` (B-ismark/Danmu#163)
-
-### Room size on the shape picker, and the "typical sizes" callout
-- **Where:** New room → **Room size · optional**: change shape, type a size, type 80 m. Start without typing: the studio's floating "These are typical sizes" callout with **These are right**, ≈ sizes, and ≈ wall lengths on capture; collapse and scroll the rail, resize; a phone. Reload afterwards.
-- **Wrong looks like:** the callout or its bubble crowding the rail at 1024–1279px, too small for a thumb, covering the app bar on a phone, left behind, or back after it was cleared (✕ or a reload right after typing); its arrow off the size fields; a ≈ on a measured room; an unreadable refused rim in the glass rail.
-- **Needs:** a real phone, and a person reading the callout.
-- **Rides:** `fdd1f20` (B-ismark/Danmu#160), `513f1e5` (B-ismark/Danmu#246), `9ac44bf` (B-ismark/Danmu#252)
 
 ### A scanned room built from photos
 - **Where:** scan a room with an armchair, dining table, sofa, a pink/patterned piece, a window with curtains; build it; pick each Style theme.
