@@ -1130,7 +1130,8 @@ out of `clearance.ts` and a comment asking that they be kept in step.
 ### The calibration ladder
 
 `calForPhoto` (`lib/photo-geometry.ts`) resolves one `CameraCal` per photo, from what the
-detect screen's `buildCals` read out of it. The wall-floor line
+detect screen's `buildCals` read out of it, and `calsForRoom` then reconciles the set
+(below). The wall-floor line
 ties focal length, camera height and tilt together in **one** equation, so it can
 solve for exactly one unknown — which one depends on what the photo already told
 us:
@@ -1139,23 +1140,31 @@ us:
 |---|---|---|
 | EXIF focal length | **camera height** | The lens is known, so the 1.5 m guess (±17% on everything) becomes a measurement. |
 | its own perspective | **camera height** | `lib/vanishing-point.ts` reads the lens out of the geometry — see below. |
-| nothing | **focal length** | The original path, assuming 1.5 m. Still correct, no longer the only one. |
+| nothing | **focal length** | The original path, at the assumed 1.5 m. Still correct, no longer the only one. Its height is never replaced by the room's shared one: the line ties it to the lens it solved. |
 | neither, or no floor line | — | A typical phone lens: 66° across the photo's **long** side, so ~52° across an upright 4:3 photo. It is the sensor's field, not the frame's — read upright as 66° across, a wall piece came back a third too big (§ 49.1). |
 
-**A line is spent on the height only where the floor could be in the picture.**
+**A line is spent on a low height only where the floor could be in the picture.**
 `findFloorLine` always returns the strongest low edge, and on a 1x lens a level phone
 at chest height 2–3 m from a wall does not show the wall's foot — so the edge is a
 sofa top or headboard, and the height fitted from it is knee height. `calForPhoto`
-refuses the fit when the junction would sit below the frame for a standing camera on
-that lens and tilt. Field test (four real rooms, true heights read off the source
-panoramas): four of the five fits that refuses were furniture at 0.84–1.05 m against
-1.4–1.5 m; the fifth was a camera genuinely held low.
+refuses a fit below 1.2 m (`STANDING_MIN_HEIGHT`) when the junction would sit below the
+frame for a standing camera on that lens and tilt. A fit at or above 1.2 m is kept
+either way: there the floor really can be in frame (a 1.2 m camera on an 80° lens sees
+it at 0.977), and the geometry cannot tell that photo from furniture, so it is the
+HEIGHT that decides. Field test (four real rooms, true heights read off the source
+panoramas): four of the five fits the first, height-blind version refused were furniture
+at 0.84–1.05 m against 1.4–1.5 m; the fifth was a camera genuinely held low, which costs
+the lounge (~0.9 m) its fit — the price of the rule, written down rather than hidden.
 
-**The four photos are one camera.** `calsForRoom` runs the ladder per photo, then
-takes the median of the heights the photos measured and hands it to the ones that
-measured none (instead of the 1.5 m guess) and, with three or more fits, to a fit
-more than 20% off it. A height the phone gave is never replaced. The person stands
-in one spot and turns; their hands do not change height between walls.
+**The four photos are one camera — when they agree.** `calsForRoom` runs the ladder per
+photo, then looks for the largest group of fitted heights within 20% of each other. Only
+if that group has two or more members AND is a majority of the fits does the room have a
+height: its median goes to the photos that measured none (instead of the 1.5 m guess) and
+replaces a fit outside the group. Otherwise nothing is shared — the seaview suite fitted
+1.46 and 1.01 (a sofa top), and the median of the two, 1.24, was a height nobody held.
+A height the phone gave is never replaced nor counted, and a lens-less photo that solved
+its lens from its own line is left alone. The person stands in one spot and turns; their
+hands do not change height between walls.
 
 **The middle rung is for photos that arrive with nothing.** A room is a box: three
 families of parallel lines, mutually perpendicular. With the principal point at
@@ -1188,8 +1197,9 @@ vanishing points, or not at all; a measured device tilt outranks an inferred one
 longer asked for: the capture screen has no field for it and `useSettings.camHeightM` is deleted (an
 old saved value is dropped on load). The rig assumes `CAM_HEIGHT` (1.5 m); a capture whose stored
 `pose.heightM` came from an older version keeps it. Only when a lens is known does the detect screen
-fit the real height to the wall-floor line (`calForPhoto`); with no lens the same line solves the focal
-length and the height stays at 1.5 m.
+fit the real height to the wall-floor line (`calForPhoto`), and a height the photos agree on is
+shared with the ones that measured none (`calsForRoom`); with no lens the same line solves the focal
+length at the assumed 1.5 m.
 
 **The fourth assumption is the unmeasured one, and it has now been priced.** The rig's
 header names four: camera at the room centre, at a known height, level, and **framing one

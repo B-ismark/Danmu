@@ -720,11 +720,22 @@ export function detectionBox(b: RawBox): [number, number, number, number] | null
  *  and it has to collapse three different kinds of duplicate: two tiles finding
  *  the same object, both models finding it, and one model stacking boxes on it. */
 export function nms(boxes: RawBox[]): RawBox[] {
-  // A box its tile cut goes after every whole one, whatever its confidence. A zoomed
-  // tile sees a door's top half clearly and scores it higher than the whole frame
-  // scores the whole door, so ranking on confidence alone kept the half. A cut box
-  // still survives where nothing whole overlaps it, so recall is unchanged.
-  const sorted = [...boxes].sort((a, b) => Number(!!a.cut) - Number(!!b.cut) || b.conf - a.conf);
+  // A box its tile cut gives way to a whole box of the same kind that overlaps it,
+  // whatever the two confidences. A zoomed tile sees a door's top half clearly and
+  // scores it higher than the whole frame scores the whole door, so ranking on
+  // confidence alone kept the half. Everything else ranks on confidence as before:
+  // a cut box is not sent to the back of the queue, where the per-image cap could
+  // drop it, and a whole box of ANOTHER kind does not outrank it (a cut door at 0.95
+  // still beats an overlapping whole-frame "cabinet" at 0.36).
+  const shadowed = (c: RawBox) =>
+    !!c.cut &&
+    boxes.some(
+      (w) =>
+        !w.cut &&
+        w.category === c.category &&
+        (iou(w, c) >= IOU_THRESHOLD || containedIn(c, w) >= CONTAINED_THRESHOLD),
+    );
+  const sorted = boxes.filter((b) => !shadowed(b)).sort((a, b) => b.conf - a.conf);
   const keep: RawBox[] = [];
   for (const b of sorted) {
     const dup = keep.some(

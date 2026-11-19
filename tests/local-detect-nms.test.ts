@@ -98,6 +98,27 @@ describe('a box cut by its tile', () => {
     expect(kept[0].h).toBeCloseTo(0.7, 12);
   });
 
+  it('is not pushed out by the per-photo cap', () => {
+    // Twelve whole boxes elsewhere in the photo, all less confident than the door.
+    const others = Array.from({ length: 12 }, (_, i) =>
+      box({ x: 0.55 + (i % 4) * 0.12, y: 0.1 + Math.floor(i / 4) * 0.3, w: 0.05, h: 0.05, conf: 0.36 }),
+    );
+    const door = box({ x: 0.2, y: 0.42, w: 0.12, h: 0.45, conf: 0.95, category: 'door', label: 'Door', cut: true });
+    expect(nms([...others, door]).some((b) => b.label === 'Door')).toBe(true);
+  });
+
+  it('is not outranked by a whole box of ANOTHER kind', () => {
+    const door = box({ x: 0.3, y: 0.42, w: 0.12, h: 0.45, conf: 0.95, category: 'door', label: 'Door', cut: true });
+    const cabinet = box({ x: 0.3, y: 0.45, w: 0.12, h: 0.5, conf: 0.36, category: 'wardrobe', label: 'Cabinet' });
+    expect(nms([cabinet, door]).map((b) => b.label)).toEqual(['Door']);
+  });
+
+  it('still swallows a smaller whole box of its own kind inside it', () => {
+    const big = box({ conf: 0.9, w: 0.4, h: 0.5, category: 'monitor', label: 'Computer monitor', cut: true });
+    const small = box({ conf: 0.5, w: 0.1, h: 0.12, category: 'monitor', label: 'Computer monitor' });
+    expect(nms([big, small])).toHaveLength(1);
+  });
+
   it('still survives where nothing whole overlaps it', () => {
     const onlyHalf = box({ x: 0.3, y: 0.42, w: 0.12, h: 0.45, conf: 0.9, category: 'door', label: 'Door', cut: true });
     const elsewhere = box({ x: 0.8, conf: 0.7 });
