@@ -6,8 +6,7 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 **Rules.**
 
 - **It is a live list.** Once someone has looked at an item, delete it. Don't strike it
-  through or archive it. This file was condensed from 3,600 lines on 2026-11-19, and it must
-  not grow back.
+  through or archive it. It must not grow back.
 - **Merging is not looking.** When a branch merges, its item stays. Re-point it at the merge
   commit on `main`, because a fix nobody has seen needs eyes more after it ships, not less.
 - **Keep items short.** Each item is four lines: **Where** (the screen and clicks), **Wrong
@@ -20,28 +19,12 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
   far ran on headless Chromium with software rendering (SwiftShader). That says nothing
   about real lighting, real touch or a real phone.
 
-**Last pass, 2026-11-19.** Checked headlessly and removed:
-
-- the five starter rooms name their pieces the way the Library does;
-- right-clicking a sofa on the plan offers both *Move to the nearest wall* and *Put on the
-  floor*, and the Inspector no longer has a Wall · Floor row;
-- the Eyedropper arms with I and puts down on Esc;
-- *Hide interface* (Ctrl/Cmd + \) clears the rails and the bar, and the pill brings them back;
-- the Library holds one Bed, one Fridge, one TV and a Ceiling light, with no Pendant.
-
-Items for features that have since been removed are gone too: the compass and *Sun
-direction*, plan rotation, the *Placed by* chip, Shuffle, the Pendant and the photograph
-banner.
-
 ---
-
 
 ## Sizes and fit
 
-*No test renders geometry and nothing here has been on a real GPU, so every look below is for eyes only.*
-
 ### Bed, fridge and dining table redraw at the size you type
-- **Where:** Library → Bed: type width 900, press Suggest; then 1800, Suggest. Fridge: width 790, then 800. Dining table: width 2400. A photo scan with a double bed cut off at the photo's edge.
+- **Where:** Library → Bed: type width 900, press Enter; then 1800. Fridge: width 790, then 800. Dining table: width 2400. A photo scan with a double bed cut off at the photo's edge.
 - **Wrong looks like:** a 900 bed with two pillows or two nightstands; fridge doors not meeting in the middle at 800 (one door below); fat legs on the long table; the scanned double coming back ~0.9 m wide.
 - **Needs:** any browser (the scan half needs a real scan with photos).
 - **Rides:** `28e1e03` (B-ismark/Danmu#212)
@@ -53,20 +36,12 @@ banner.
 - **Rides:** `b5414e0` (B-ismark/Danmu#217)
 
 ### An old room's ceiling fan still hangs short of the slab
-- **Where:** A room saved in this browser before `1d16087` holding a fan; add a second fan beside it. Then change the ceiling height by 1 cm and back.
+- **Where:** A room saved with a fan by an older build; add a second fan beside it. Then change the ceiling height by 1 cm and back.
 - **Wrong looks like:** judge whether one flush fan beside one 30–55 mm short reads as a bug; after the ceiling nudge both should be flush.
 - **Needs:** a browser with a room saved by an older build.
 - **Rides:** `1d16087` (B-ismark/Danmu#88)
 
-### Ceiling light drawn flush, in new rooms and old pendant rooms
-- **Where:** Library → Lighting → Ceiling light, 3D from below and the side, then 2D Plan. A new T-Shape or Open Plan room. Old rooms that held a pendant: untouched, moved/resized, with a saved layout, and one renamed from the rooms list before opening.
-- **Wrong looks like:** light missing or a cone shade on a cord; disc hanging below or poking through the ceiling; a moved light jumping back to the table; diffuser dark while on (or lit after removal); plan circle not matching the 3D disc.
-- **Needs:** a real GPU for the look; a browser with older saved rooms for the migration.
-- **Rides:** `e4e3f4e` (B-ismark/Danmu#261)
-
 ## Surfaces and textures
-
-*Probed in headless Chromium only; the real-GPU and Best looking picture is unseen.*
 
 ### Floor, wall, furniture and ceiling textures on a real GPU
 - **Where:** Any room, Best looking and Smoother, Midday and Night: orbit low to see the ceiling, zoom on sofa and coffee table. Floor and Walls in the left rail: every material/finish, size, grout/mortar, dark and pale colours. Every Finish on a sofa, dining chair, door, mirror.
@@ -78,12 +53,6 @@ banner.
 - **Where:** 3D: still-click the floor, then orbit and return to the start before releasing; on a phone, tap the floor.
 - **Wrong looks like:** judge whether an orbit that returns to its start selecting the floor bothers anyone; the floor's green edge hidden behind the near wall's cut-away; no Floor sheet on a phone tap.
 - **Needs:** real phone (touch), any browser for the rest.
-- **Rides:** `93e65aa` (B-ismark/Danmu#306)
-
-### Opening a room on Best looking draws the room
-- **Where:** Settings → Best looking; open a room twice, on a real phone and a real laptop GPU.
-- **Wrong looks like:** the veil lifting onto a dark canvas, or "The 3D view could not draw this room" on a healthy device.
-- **Needs:** real GPU, real phone.
 - **Rides:** `93e65aa` (B-ismark/Danmu#306)
 
 ## Drag and selection
@@ -128,7 +97,7 @@ banner.
 
 ### Change the model puts a floor piece beside the bed, a lamp on the desk
 - **Where:** U-Shape: print above the headboard → Change the model… → Nightstand, Floor lamp, Armchair, Floor plant (undo between). Print above a desk → Table lamp.
-- **Wrong looks like:** any piece inside the bed's outline in the plan or through the duvet in 3D; the table lamp not on the desk. (A too-wide piece in a U arm ending a few cm through the plaster is a known limit.)
+- **Wrong looks like:** any piece inside the bed's outline in the plan or through the duvet in 3D; the table lamp not on the desk.
 - **Needs:** any browser, both tabs.
 - **Rides:** `6a7f93f` (B-ismark/Danmu#210), `502fb23` (B-ismark/Danmu#206)
 
@@ -185,7 +154,7 @@ banner.
 - **Rides:** `0972aed` (B-ismark/Danmu#214)
 
 ### Ideas puts a seat on the floor, never on a table
-- **Where:** Rectangle 6 × 4: ottoman dragged onto the coffee table with a small box on it → Ideas → Try a card → Back; then keep the ottoman in place and look again.
+- **Where:** Rectangle 6 × 4: ottoman dragged onto the coffee table with a small box on it → Ideas → press an idea card → Back; then keep the ottoman in place and look again.
 - **Wrong looks like:** ottoman on, inside or floating over the table in a card; the box left behind; Back not restoring it; a kept ottoman that moved; a clean room told "Try Fix first".
 - **Needs:** any browser.
 - **Rides:** `6a4b45a` (B-ismark/Danmu#222)
@@ -221,8 +190,8 @@ banner.
 - **Rides:** `6ff707f` (B-ismark/Danmu#159)
 
 ### Pieces drawn as the real objects
-- **Where:** add each from the Library; orbit at eye level, low down and from behind; recolour; stretch to smallest and largest on each axis; lock one. Pieces: standing fan; pillows, duvet and scatter cushions, sofa/armchair cushions, clothes rail, shoe rack, curtain; washing machine, microwave, chest freezer, water dispenser, air conditioner, soundbar, TV console, door; TV, nightstand (open the drawers), stool; floor and table lamps (lit, evening mood); dining, office and armchair (tucked too); ottoman, side table, radiator; painting, mirror, oval mirror, air purifier; coffee table, dining table, desk, L-desk, window (light patch on the floor), laptop.
-- **Wrong looks like:** parts flickering where they meet; feet, legs or casters sunk or floating; pillows or cushions floating or buried, cushions not taking the locked tint; a resize stretching a dial into an oval or the fan head off its pole; lamp light above or below the shade; glass in front of a frame or casting a solid shadow.
+- **Where:** add each from the Library; orbit at eye level, low down and from behind; recolour; stretch to smallest and largest on each axis, widen the shoe rack and clothes rail; lock one. Pieces: standing fan; pillows, duvet and scatter cushions, sofa/armchair cushions, clothes rail, shoe rack, curtain; washing machine, microwave, chest freezer, water dispenser, air conditioner, soundbar, TV console, door; TV, nightstand (open the drawers), stool; floor and table lamps (lit, evening mood); dining, office and armchair (tucked too); ottoman, side table, radiator; painting, mirror, oval mirror, air purifier; coffee table, dining table, desk, L-desk, window (light patch on the floor), laptop.
+- **Wrong looks like:** parts flickering where they meet; feet, legs or casters sunk or floating; pillows or cushions floating or buried, cushions not taking the locked tint; a resize stretching a dial into an oval or the fan head off its pole; lamp light above or below the shade; a shoe through a shelf or a garment through the rail; the dining table with a slab end instead of four legs; glass in front of a frame or casting a solid shadow.
 - **Judge on purpose:** brass reading as dark bronze; slivers of light between the curtain folds; recolour leaving the dining-chair pad and lamp ceramic alone; mirror glass vs grey card; window glass vs blue panel; scatter cushion lean (~50°).
 - **Needs:** real GPU.
 - **Rides:** `6a7f93f` (#210), `882db71` (#216), `304b9b4` (#218), `7cea640` (#219), `a3f0ff4` (#221), `073a4b4` (#223), `d6fa818` (#225), `a1f1755` (#227), `2477e58` (#228), all B-ismark/Danmu.
@@ -280,22 +249,34 @@ banner.
 - **Rides:** `17f9d62` (B-ismark/Danmu#148)
 
 ### Scanned pieces sit where the photo shows them
-- **Where:** scan a room with a wardrobe or sofa against a wall, and a print or mirror near a corner shared by two photos. Check 3D and the 2D plan.
-- **Wrong looks like:** a floor piece's back through the plaster, or a hand's width off the wall. A corner piece placed on the wrong wall, or a high wall fixture turning up as a ceiling light.
+- **Where:** scan a room with a wardrobe or sofa against a wall, a print or mirror near a corner shared by two photos, a wardrobe/curtain/bookcase running off the frame, a plant/floor lamp/stool cut by the frame side, a dining table with chairs both sides, and an ottoman beside a coffee table with a tray on it. Check 3D, 2D Plan and Room check against the photo; count chair rows.
+- **Wrong looks like:** a floor piece's back through the plaster or a hand's width off the wall; a corner piece on the wrong wall; a high wall fixture as a ceiling light; a cut piece as a sliver, growing through a side wall or away from the side the photo saw; a round piece out in the room; fewer chair rows than chairs, an unticked chair naming the wrong twin; an ottoman (or a stool/armchair listed as *Other*) in the air, on the tabletop, or overlapping the table with Room check silent.
 - **Needs:** a real scan with photos.
-- **Rides:** `17f9d62` (B-ismark/Danmu#148)
+- **Rides:** `17f9d62` (B-ismark/Danmu#148), `e998926` (B-ismark/Danmu#164), `0aa19b2` (B-ismark/Danmu#195), `0fb6a27` (B-ismark/Danmu#180)
 
-### Re-scan after dragging a wall
-- **Where:** build a room from photos, drag one wall about a metre, then Room → **Re-scan**.
-- **Wrong looks like:** Re-scan doing nothing on a reshaped room, or floor pieces sitting off their walls afterwards.
+### Re-scan after dragging a wall, and restoring your moved pieces
+- **Where:** build a room from photos, drag one wall about a metre, then Room → **Re-scan**. On a photographed room, move a piece and add one, Room rail → Re-scan → **Look again** → Continue; then Room check › Layouts → *Before re-scan*.
+- **Wrong looks like:** Re-scan doing nothing on a reshaped room, or floor pieces off their walls afterwards; *Before re-scan* not putting the moved and added pieces back; the studio keeping the old arrangement.
 - **Needs:** a real scan with photos.
-- **Rides:** `91f1f6a` (B-ismark/Danmu#150)
+- **Rides:** `91f1f6a` (B-ismark/Danmu#150), `c2137c4` (B-ismark/Danmu#157)
 
-### Does the rebuilt room look like the room, and the U-Shape's blank Wall 1
-- **Where:** any preset → *Photograph my real room first* → four real photos → detect → **Continue**. On a U-Shape, look at the capture cards' wall-length labels.
-- **Wrong looks like:** pieces on the wrong wall or out of proportion with the real room. U-Shape Wall 1 shows no length by design; the call is whether that reads as a broken number.
+### Does the rebuilt room look like the room
+- **Where:** any preset → *Photograph my real room first* → four real photos → detect → **Continue**.
+- **Wrong looks like:** pieces on the wrong wall or out of proportion with the real room.
 - **Needs:** a real scan with photos, and a person's judgement.
 - **Rides:** `e6cd8f4` (B-ismark/Danmu#154)
+
+### Detect review: kept pieces, a bed seen twice, linking by hand
+- **Where:** detect screen. Untick rows with ✓/+, then **Continue with N pieces**, and also untick everything. Photograph a bed on two walls: the repeat starts unticked and asks *"Same bed as on Wall 1?"*. On the second wall's tab open the bed row's **Seen this already?** and pick Wall 1's bed; check **All walls**, Continue; untick or delete either bed, then tick it again.
+- **Wrong looks like:** a left-out piece in the studio, or a kept one missing; + reading as "add new"; two ticked beds, two beds or none, or a bed somewhere neither photo shows; the picker offering a linked piece or the row itself; the walls disagreeing on kept or left out; the caption naming the wrong wall, clipped at 360px, or *"Same the bed"*; an old room opening with pieces missing.
+- **Needs:** a real scan with photos, at phone width.
+- **Rides:** `fdd1f20` (B-ismark/Danmu#160), `420576e` (B-ismark/Danmu#260), `7c33c43` (B-ismark/Danmu#263)
+
+### Scanned pieces sit where the photo shows them
+- **Where:** scan a room with a wardrobe or sofa against a wall, a print or mirror near a corner shared by two photos, a wardrobe/curtain/bookcase running off the frame, a plant/floor lamp/stool cut by the frame side, a dining table with chairs both sides, and an ottoman beside a coffee table with a tray on it. Check 3D, 2D Plan and Room check against the photo; count chair rows.
+- **Wrong looks like:** a floor piece's back through the plaster or a hand's width off the wall; a corner piece on the wrong wall; a high wall fixture as a ceiling light; a cut piece as a sliver, growing through a side wall or away from the side the photo saw; a round piece out in the room; fewer chair rows than chairs, an unticked chair naming the wrong twin; an ottoman (or a stool/armchair listed as *Other*) in the air, on the tabletop, or overlapping the table with Room check silent.
+- **Needs:** a real scan with photos.
+- **Rides:** `17f9d62` (B-ismark/Danmu#148), `e998926` (B-ismark/Danmu#164), `0aa19b2` (B-ismark/Danmu#195), `0fb6a27` (B-ismark/Danmu#180)
 
 ### Paper colour and the room size hints
 - **Where:** light mode on a real display, with pale wall colours in 3D. Resize a rug past the room in the Inspector. Drag a room's width down to its largest piece.
@@ -303,39 +284,21 @@ banner.
 - **Needs:** a real screen.
 - **Rides:** `0c3cd64` (B-ismark/Danmu#158)
 
-### Loading states
-- **Where:** open a room, switch tabs, run a slow Fix or Try a fix, and run a detection (the loading card).
-- **Wrong looks like:** the previous room flashing, a veil that never lifts, "Building the 3D view…" on every tab switch, a working toast that outlives its result or shows on a quick Fix, or the card not reading dot, "Working…" and Stop on one row.
-- **Needs:** a real GPU and a real phone.
-- **Rides:** `6ff707f` (B-ismark/Danmu#159), `0c3cd64` (B-ismark/Danmu#158)
-
-### Detect review: kept pieces and a bed seen twice
-- **Where:** detect screen. Untick rows with ✓/+, then **Continue with N pieces**, and also untick everything. Photograph a bed on two walls: the repeat starts unticked and asks *"Same bed as on Wall 1?"*.
-- **Wrong looks like:** a left-out piece in the studio, or a kept one missing. + reading as "add new". Two ticked beds. The caption naming the wrong wall, clipped at 360px, or *"Same the bed"*. An old room opening with pieces missing.
-- **Needs:** a real scan with photos, at phone width.
-- **Rides:** `fdd1f20` (B-ismark/Danmu#160)
-
-### Linking one piece across two walls by hand
-- **Where:** on the second wall's tab, open the bed row's **Seen this already?** and pick Wall 1's bed. Check **All walls**, then **Continue**. Untick or delete either bed, then tick it again.
-- **Wrong looks like:** two beds or none, the bed somewhere neither photo shows, the picker offering a linked piece or the row itself, the two walls disagreeing on kept or left out, or the control clipped at 360px.
-- **Needs:** a real scan with photos, and a phone.
-- **Rides:** `420576e` (B-ismark/Danmu#260), `7c33c43` (B-ismark/Danmu#263)
-
 ### Room size on the shape picker, and the "typical sizes" callout
-- **Where:** New room → **Room size · optional**: change shape, type a size, type 80 m. Start without typing: the studio's floating "These are typical sizes" callout with **These are right**, ≈ sizes, and ≈ wall lengths on capture. Reload afterwards.
-- **Wrong looks like:** the callout crowding the rail at 1024–1279px, too small for a thumb, or back after it was cleared, including a reload right after typing. A ≈ on a measured room. An unreadable refused rim in the glass rail.
+- **Where:** New room → **Room size · optional**: change shape, type a size, type 80 m. Start without typing: the studio's floating "These are typical sizes" callout with **These are right**, ≈ sizes, and ≈ wall lengths on capture; collapse and scroll the rail, resize; a phone. Reload afterwards.
+- **Wrong looks like:** the callout or its bubble crowding the rail at 1024–1279px, too small for a thumb, covering the app bar on a phone, left behind, or back after it was cleared (✕ or a reload right after typing); its arrow off the size fields; a ≈ on a measured room; an unreadable refused rim in the glass rail.
 - **Needs:** a real phone, and a person reading the callout.
-- **Rides:** `fdd1f20` (B-ismark/Danmu#160), `513f1e5` (B-ismark/Danmu#246)
+- **Rides:** `fdd1f20` (B-ismark/Danmu#160), `513f1e5` (B-ismark/Danmu#246), `9ac44bf` (B-ismark/Danmu#252)
 
 ### Photo tags stay on the photo
 - **Where:** the detect screen with boxes at the photo's right edge and top, and one past the frame. With **Add a piece by hand** on, drag and tap the X.
-- **Wrong looks like:** a tag or X past the photo's edge, the review scrolling sideways at 360px, a tag not touching its box, a pendant's box not toggling, or overlapping tags hiding an X (known; is it common on real photos?).
+- **Wrong looks like:** a tag or X past the photo's edge, the review scrolling sideways at 360px, a tag not touching its box, a ceiling light's box not toggling.
 - **Needs:** a real phone with a real scan.
 - **Rides:** `ac7104a` (B-ismark/Danmu#161)
 
 ### Scan photo pinned while the list scrolls
 - **Where:** scan screen with a long list, scrolled to the end. On a phone: swipe on the photo strip, turn on **Add a piece by hand**, Shift+Tab up the list.
-- **Wrong looks like:** the photo gone or cut off, the last row hidden, the strip jumping as the address bar slides, a tiny inner scroll, or a focused row under the strip. Is 240×180 big enough to draw on?
+- **Wrong looks like:** the photo gone or cut off, the last row hidden, the strip jumping as the address bar slides, a tiny inner scroll, or a focused row under the strip.
 - **Needs:** a real phone (touch).
 - **Rides:** `a5c63b2` (B-ismark/Danmu#162)
 
@@ -345,24 +308,42 @@ banner.
 - **Needs:** a real phone, plus desktop Safari.
 - **Rides:** `31bac6a` (B-ismark/Danmu#163)
 
-### A piece the photo cut off comes back whole
-- **Where:** scan photos where a wardrobe, curtain or bookcase runs off the frame, then open the studio.
-- **Wrong looks like:** a cut piece coming back as a sliver, growing through a side wall, or growing away from the side the photo saw.
-- **Needs:** a real scan with photos.
-- **Rides:** `e998926` (B-ismark/Danmu#164)
+### Room size on the shape picker, and the "typical sizes" callout
+- **Where:** New room → **Room size · optional**: change shape, type a size, type 80 m. Start without typing: the studio's floating "These are typical sizes" callout with **These are right**, ≈ sizes, and ≈ wall lengths on capture; collapse and scroll the rail, resize; a phone. Reload afterwards.
+- **Wrong looks like:** the callout or its bubble crowding the rail at 1024–1279px, too small for a thumb, covering the app bar on a phone, left behind, or back after it was cleared (✕ or a reload right after typing); its arrow off the size fields; a ≈ on a measured room; an unreadable refused rim in the glass rail.
+- **Needs:** a real phone, and a person reading the callout.
+- **Rides:** `fdd1f20` (B-ismark/Danmu#160), `513f1e5` (B-ismark/Danmu#246), `9ac44bf` (B-ismark/Danmu#252)
 
-### Scanned seats stay on the floor
-- **Where:** scan a small room with an ottoman beside a coffee table, and a tray on an ottoman. Open 3D and Room check.
-- **Wrong looks like:** an ottoman in the air or on the tabletop, or overlapping the table with Room check silent. A stool or armchair listed as *Other* behaving the same.
-- **Needs:** a real scan with photos.
-- **Rides:** `0aa19b2` (B-ismark/Danmu#195)
+### A scanned room built from photos
+- **Where:** scan a room with an armchair, dining table, sofa, a pink/patterned piece, a window with curtains; build it; pick each Style theme.
+- **Wrong looks like:** the armchair as a two-seat sofa; one sofa listed twice; any photo colour or one aubergine tint; a window proud of the wall; curtains smaller than the window; a theme skipping scanned pieces; the privacy line wrong for where photos went.
+- **Needs:** a real scan with photos (on-device model and a key).
+- **Rides:** `0e11438` (B-ismark/Danmu#256), `a2ec948` (B-ismark/Danmu#254), `c2137c4` (B-ismark/Danmu#157)
+
+### Cloud scan files rows under photographed walls
+- **Where:** a Google key, one wall photographed, then two; reload; *3 pieces left out* card; an old scanned room opened and re-scanned.
+- **Wrong looks like:** *couldn't make sense of the reply* on real furniture; a row with no tag on its photo; `__slot:` in any name; a piece moved on open; the left-out card on an on-device scan or after a reload.
+- **Needs:** a real scan with photos and a key.
+- **Rides:** `bd09f2f` (B-ismark/Danmu#171), `a080c3e` (B-ismark/Danmu#172), `408cdbe` (B-ismark/Danmu#173)
+
+### Scan review rows: rename and size wording
+- **Where:** scan review, type a new name on a row (shelf → "Shoe rack", lamp → "Ceiling light", bed → "fri", sofa → "lamp"), with and without a measured room; on a phone, tap an option. *Photograph your real room* with a sofa/bed foot-cut, a stool tipped down, a sofa cut at the side, a door cut at the bottom; rename to Chair/TV and press *Use X?*.
+- **Wrong looks like:** no list while the word names a Library piece; one option where a family has two; the row keeping the half-typed word or old model; the tap also toggling the next row or an offer chip; "Floor lamp" → "Tall lamp" offering another lamp; a renamed "Painting" not on the wall; "about"/"at least" missing on the cut axis or on the whole one; both on one line; a bare *2.67 m* with no *wide/tall*; chips wrapping under the tick at 360 px; a flagged correct piece needing more than one tap.
+- **Needs:** any browser, a real phone (touch), a real scan with photos.
+- **Rides:** `1c7644b` (B-ismark/Danmu#240), `e12c0bb` (B-ismark/Danmu#241), `0fb6a27` (B-ismark/Danmu#180), `12b0209` (B-ismark/Danmu#170)
+
+### Flow screens, Photo and Check your furniture
+- **Where:** Rooms (full list) → *Photograph your room* empty then with three photos (hover cards, a card's Wall list, plan walls, Add photos tile) → New room → Photos → Check your furniture → Building, with the waiting card and *Your pieces*; Settings; at laptop, ~1000 px and phone widths.
+- **Wrong looks like:** *Continue to photos* not leading from *Photograph your room*; sticky card/index sliding under the bar; buttons below the fold at 1280 × 800; step names or chips off a phone edge; the Building floor as a bounding box or missing ≈; Settings index marking the wrong card; Open buttons misaligned; any sideways scroll; the lit wall off the outline or not the one named (U-Shape: no wall ahead); shimmer missing or wrong card lifted; the Add tile squat or thin; loader stuttering or moving under reduced motion; piece colours/dots indistinguishable; box↔row hover not linking; a picked model left unticked.
+- **Needs:** any browser, a real scan with photos, a real phone.
+- **Rides:** `2b7e446` (B-ismark/Danmu#243), `5bac78c` (B-ismark/Danmu#242), `e12c0bb` (B-ismark/Danmu#241), `0e11438` (B-ismark/Danmu#256), `a2ec948` (B-ismark/Danmu#254), `9ac44bf` (B-ismark/Danmu#252)
 
 ## Look and light
 
 *How the 3D room looks, lights and sounds, and what a scan builds into it.*
 
 ### Hide interface in 3D and on a phone
-- **Where:** 3D Model tab, click the room, Ctrl/Cmd + \ (also from a rail text field, the View menu row, and on a phone).
+- **Where:** 3D Model tab, click the room, Ctrl/Cmd + \ (also from a rail text field and the View menu row), on a phone and on a German/Nordic keyboard.
 - **Wrong looks like:** a cluster left over the room, the camera moving, a reopened Library card losing its search, the pill off-centre or under the home indicator, the key dead on a German/Nordic layout.
 - **Needs:** any browser (3D), a real phone, a non-US keyboard.
 - **Rides:** `e8b6bd3` (B-ismark/Danmu#314)
@@ -374,16 +355,16 @@ banner.
 - **Rides:** `e8b6bd3` (B-ismark/Danmu#314)
 
 ### Best looking on a real GPU
-- **Where:** any room, 3D Model, View → Quality → Best looking, every mood, console open; flip to Smoother and back; Export → This 3D view.
-- **Wrong looks like:** a repeating `reading 'length'` error or frozen canvas; no corner shading; Best looking flatter than Smoother; backdrop a different colour inside the canvas; a windowless room as bright as one with windows; wood grain as stripes; lamp shade clipping white; the PNG missing the shading.
-- **Needs:** real GPU.
-- **Rides:** `2f31b3d` (B-ismark/Danmu#307), `c2137c4` (B-ismark/Danmu#157)
+- **Where:** any room, 3D Model, View → Quality → Best looking, every mood, console open; flip to Smoother and back; Export → This 3D view. Settings → Best looking; open a room twice, on a real phone and a real laptop GPU.
+- **Wrong looks like:** a repeating `reading 'length'` error or frozen canvas; no corner shading; Best looking flatter than Smoother; backdrop a different colour inside the canvas; a windowless room as bright as one with windows; wood grain as stripes; lamp shade clipping white; the PNG missing the shading; the veil lifting onto a dark canvas, or "The 3D view could not draw this room" on a healthy device.
+- **Needs:** real GPU, real phone.
+- **Rides:** `2f31b3d` (B-ismark/Danmu#307), `c2137c4` (B-ismark/Danmu#157), `93e65aa` (B-ismark/Danmu#306)
 
-### Shoe rack, clothes rail, dining table drawn as the real object
-- **Where:** Library → shoe rack, clothes rail, dining table; orbit at eye level; widen the rack and rail in the Inspector.
-- **Wrong looks like:** a shoe through a shelf, a garment through the lower bar or a post, the dining table with a slab end instead of four legs.
-- **Needs:** any browser.
-- **Rides:** `28e1e03` (B-ismark/Danmu#212)
+### Best looking on a real GPU
+- **Where:** any room, 3D Model, View → Quality → Best looking, every mood, console open; flip to Smoother and back; Export → This 3D view. Settings → Best looking; open a room twice, on a real phone and a real laptop GPU.
+- **Wrong looks like:** a repeating `reading 'length'` error or frozen canvas; no corner shading; Best looking flatter than Smoother; backdrop a different colour inside the canvas; a windowless room as bright as one with windows; wood grain as stripes; lamp shade clipping white; the PNG missing the shading; the veil lifting onto a dark canvas, or "The 3D view could not draw this room" on a healthy device.
+- **Needs:** real GPU, real phone.
+- **Rides:** `2f31b3d` (B-ismark/Danmu#307), `c2137c4` (B-ismark/Danmu#157), `93e65aa` (B-ismark/Danmu#306)
 
 ### The day strip
 - **Where:** 3D Model tab, the sun pill: rest, approach, drag 05:00 → 22:00 slow and fast, release off the strip, arrows from 23:30/00:00, Overcast, reduced motion, open the Library, reload at morning/19:30/night; a phone.
@@ -409,51 +390,15 @@ banner.
 - **Needs:** any browser.
 - **Rides:** `c2137c4` (B-ismark/Danmu#157)
 
-### Fix and Ideas think in the background
-- **Where:** furnished room, rail → Fix/Ideas, orbit while it works; press it then Ctrl+Z; resize a piece until the *That size change left N problems* toast, drag another piece, then press **Re-fit**.
-- **Wrong looks like:** the room freezing while it works; an arrangement landing over your undo; Re-fit overwriting the drag.
-- **Needs:** a real laptop and a real phone.
-- **Rides:** `c2137c4` (B-ismark/Danmu#157)
-
-### Scan screen: size wording on cut-off pieces
-- **Where:** *Photograph my real room* with a sofa/bed foot-cut, a stool tipped down, a sofa cut at the side, a door cut at the bottom; rename to Chair/TV and press *Use X?*.
-- **Wrong looks like:** "about"/"at least" missing on the cut axis or on the whole one; both on one line; a bare *2.67 m* with no *wide/tall*; chips wrapping under the tick at 360 px; a flagged correct piece needing more than one tap; how often correct pieces get flagged in a real room.
-- **Needs:** a real scan with photos.
-- **Rides:** `0fb6a27` (B-ismark/Danmu#180), `12b0209` (B-ismark/Danmu#170)
-
-### Cloud scan files rows under photographed walls
-- **Where:** a Google key, one wall photographed, then two; reload; *3 pieces left out* card; an old pre-#171 scanned room opened and re-scanned.
-- **Wrong looks like:** *couldn't make sense of the reply* on real furniture; a row with no tag on its photo; `__slot:` in any name; a piece moved on open; the left-out card on an on-device scan or after a reload.
-- **Needs:** a real scan with photos and a key.
-- **Rides:** `bd09f2f` (B-ismark/Danmu#171), `a080c3e` (B-ismark/Danmu#172), `408cdbe` (B-ismark/Danmu#173)
-
-### Side-cut round pieces and chairs both sides of a table
-- **Where:** a scan with a plant/floor lamp/stool cut by the frame side, and a dining table with chairs both sides; compare 3D and 2D Plan with the photo; count chair rows.
-- **Wrong looks like:** the piece out in the room or through the side wall; the seen side moved; fewer chair rows than chairs; an unticked chair naming the wrong twin.
-- **Needs:** a real scan with photos.
-- **Rides:** `0fb6a27` (B-ismark/Danmu#180)
-
-### Re-scan restores your moved and added pieces
-- **Where:** a photographed room, move a piece and add one, Room rail → Re-scan → **Look again** → Continue; then Room check › Layouts → *Before re-scan*.
-- **Wrong looks like:** applying *Before re-scan* not putting the moved and added pieces back; the studio keeping the old arrangement.
-- **Needs:** a real scan with photos.
-- **Rides:** `c2137c4` (B-ismark/Danmu#157)
-
-### A scanned room built from photos
-- **Where:** scan a room with an armchair, dining table, sofa, a pink/patterned piece, a window with curtains; build it; pick each Style theme.
-- **Wrong looks like:** the armchair as a two-seat sofa; one sofa listed twice; any photo colour or one aubergine tint; a window proud of the wall; curtains smaller than the window; a theme skipping scanned pieces; the privacy line wrong for where photos went.
-- **Needs:** a real scan with photos (on-device model and a key).
-- **Rides:** `0e11438` (B-ismark/Danmu#256), `a2ec948` (B-ismark/Danmu#254), `c2137c4` (B-ismark/Danmu#157)
+### Loading states, and Fix and Ideas thinking in the background
+- **Where:** open a room, switch tabs, run a slow Fix or Try a fix, and run a detection (the loading card); furnished room, rail → Fix/Ideas, orbit while it works; press it then Ctrl+Z; resize a piece until the *That size change left N problems* toast, drag another piece, then press **Re-fit**.
+- **Wrong looks like:** the previous room flashing, a veil that never lifts, "Building the 3D view…" on every tab switch, a working toast that outlives its result or shows on a quick Fix, the card not reading dot, "Working…" and Stop on one row; the room freezing while it works; an arrangement landing over your undo; Re-fit overwriting the drag.
+- **Needs:** a real GPU, a real laptop and a real phone.
+- **Rides:** `6ff707f` (B-ismark/Danmu#159), `0c3cd64` (B-ismark/Danmu#158), `c2137c4` (B-ismark/Danmu#157)
 
 ## Screens and polish
 
 *Layout, copy and controls outside the 3D render.*
-
-### Rename on the scan review
-- **Where:** scan review, type a new name on a row (shelf → "Shoe rack", lamp → "Ceiling light", bed → "fri", sofa → "lamp"), with and without a measured room; on a phone, tap an option.
-- **Wrong looks like:** no list while the word names a Library piece; one option where a family has two; the row keeping the half-typed word or old model; the tap also toggling the next row or an offer chip; "Floor lamp" → "Tall lamp" offering another lamp; a renamed "Painting" not on the wall.
-- **Needs:** any browser, a real phone (touch).
-- **Rides:** `1c7644b` (B-ismark/Danmu#240), `e12c0bb` (B-ismark/Danmu#241)
 
 ### Rooms page select mode
 - **Where:** `/` with a few rooms, **Select**, pick by tick and by drawing, select-all, scroll, Esc, Delete.
@@ -467,35 +412,17 @@ banner.
 - **Needs:** any browser (a copy judgement).
 - **Rides:** `e12c0bb` (B-ismark/Danmu#241)
 
-### Moss Ink palette and Figtree
-- **Where:** every screen on a real display, especially 3D selection/hover/invalid red, the 2D plan, the home-screen icon, the error page.
-- **Wrong looks like:** a leftover terracotta surface; a 3D or plan colour not matching the panel; text not in Figtree; a button label cut off.
-- **Needs:** a real screen.
-- **Rides:** `e12c0bb` (B-ismark/Danmu#241)
-
-### Flow design screens
-- **Where:** Rooms (full list) → *Photograph your room* → New room → Photos → Check furniture → Building; Settings; at laptop, ~1000 px and phone widths.
-- **Wrong looks like:** *Continue to photos* not leading from *Photograph your room*; sticky card/index sliding under the bar; buttons below the fold at 1280 × 800; step names or chips off a phone edge; the Building floor as a bounding box or missing ≈; Settings index marking the wrong card; Open buttons misaligned; any sideways scroll.
-- **Needs:** any browser, a real phone.
-- **Rides:** `2b7e446` (B-ismark/Danmu#243), `5bac78c` (B-ismark/Danmu#242), `e12c0bb` (B-ismark/Danmu#241)
-
-### Photo and Check-furniture screens
-- **Where:** *Photograph my room* empty then with three photos: hover cards, a card's Wall list, plan walls; Add photos tile; then a scan's waiting card, Building screen and *Your pieces*.
-- **Wrong looks like:** the lit wall off the outline or not the one named (U-Shape: no wall ahead); shimmer missing or wrong card lifted; the Add tile squat or thin; loader stuttering or moving under reduced motion; piece colours/dots indistinguishable; box↔row hover not linking; a picked model left unticked.
-- **Needs:** a real scan with photos, a real phone.
-- **Rides:** `0e11438` (B-ismark/Danmu#256), `a2ec948` (B-ismark/Danmu#254), `9ac44bf` (B-ismark/Danmu#252), `5bac78c` (B-ismark/Danmu#242)
-
 ### Empty Rooms page drawing sheet
 - **Where:** `/` with no rooms, Light and Dark, laptop and phone; hover the three rows; *Try the starter room*; switch Units to feet.
 - **Wrong looks like:** an open/rounded wall corner after the draw-on; labels or scale bar off their lines; the drawing differing from the room it opens; furniture appearing late under reduced motion; title block wrapping on a phone.
 - **Needs:** any browser, a real phone.
 - **Rides:** `5ef1ed6` (B-ismark/Danmu#300)
 
-### Night mode
-- **Where:** Settings → Appearance and View settings; Dark/Light/System while flipping the device; walk every screen, studio both tabs, a toast, a refused drag.
-- **Wrong looks like:** a cream flash on load; a cream patch in Dark; any warm/brown or olive cast (should be neutral grey); squint-level `--ink-3` captions; the phone status bar staying cream; the 3D room or plan PNG changing with theme; plan amber as a brown slab.
-- **Needs:** a real phone, Safari.
-- **Rides:** `e4e3f4e` (B-ismark/Danmu#261), `5ef1ed6` (B-ismark/Danmu#300)
+### Palette and night mode, whole app
+- **Where:** every screen on a real display, especially 3D selection/hover/invalid red, the 2D plan, the home-screen icon, the error page; Settings → Appearance and View settings; Dark/Light/System while flipping the device; studio both tabs, a toast, a refused drag.
+- **Wrong looks like:** a leftover terracotta surface; a 3D or plan colour not matching the panel; text not in Figtree; a button label cut off; a cream flash on load or a cream patch in Dark; any warm/brown or olive cast (should be neutral grey); squint-level `--ink-3` captions; the phone status bar staying cream; the 3D room or plan PNG changing with theme; plan amber as a brown slab.
+- **Needs:** a real screen, a real phone, Safari.
+- **Rides:** `e12c0bb` (B-ismark/Danmu#241), `e4e3f4e` (B-ismark/Danmu#261), `5ef1ed6` (B-ismark/Danmu#300)
 
 ### A drawing per piece in the lists
 - **Where:** Catalog, Library, Room check → List; at ~1100 px and on a phone.
@@ -537,12 +464,6 @@ banner.
 - **Where:** the view pill bottom-right of the 3D canvas; a phone; orbit by hand.
 - **Wrong looks like:** words cut on a laptop; words not icons on a phone; pressed state surviving an orbit or clearing on a floor click.
 - **Needs:** trackpad, a phone.
-- **Rides:** `9ac44bf` (B-ismark/Danmu#252)
-
-### "Typical sizes" bubble
-- **Where:** a new room from a shape; collapse and scroll the rail, resize; a phone.
-- **Wrong looks like:** the arrow off the size fields; the bubble left behind; covering the app bar on a phone; returning after ✕.
-- **Needs:** any browser, a phone.
 - **Rides:** `9ac44bf` (B-ismark/Danmu#252)
 
 ### Hover card, scrollbars, app bar
