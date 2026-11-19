@@ -142,7 +142,7 @@ banner.
 - **Where:** Keyboard-turn a painting on a wall and refuse a sofa at 90°, with a screen reader on.
 - **Wrong looks like:** the three-clause announcement (incl. a 0.02 m nudge) too long; the 500 ms red outline missed by the eye; "Nothing turned." reading as a fault.
 - **Needs:** ears (screen reader) and eyes.
-- **Rides:** B-ismark/Danmu#102 (merge commit not in this clone)
+- **Rides:** `0a7b760` (B-ismark/Danmu#102)
 
 ### Second finger on the rotate ring mid-drag
 - **Where:** Touch device: long-press a drawer unit, slide it, and put a second finger on the selected piece's ring while moving.
@@ -200,13 +200,13 @@ banner.
 - **Where:** Open Plan and L-Shape → Ideas three times; drag the rug half past a wall → Room check → Try a fix; on 6 × 4, leave a rug 30 cm into a wall and press Fix and Ideas, pinned and unpinned; a 5 × 4 rug in a 4.8 × 3.8 room → Ideas.
 - **Wrong looks like:** a rug edge through a wall you did not put it through; a rug jammed into one corner on every card; Try a fix that spins and finds nothing; a rug you left moved or turned; "No ideas this time".
 - **Needs:** any browser.
-- **Rides:** § H.6.1 (commit not recorded).
+- **Rides:** `2c4759f` (B-ismark/Danmu#185)
 
 ### A chair tucked under its table stays on the floor
 - **Where:** T-Shape, both tabs: drag the dining set a hand's width; nudge a deeply tucked chair with an arrow key; change a table lamp at the table's edge into a Dining chair. 3D only: table at 1613 mm wide, drag it with Move, Turn and Scale.
 - **Wrong looks like:** a chair seat level with the tabletop; a chair left behind; "Floating" on a chair that is on something; a lamp dropped on the table falling to the floor; the width reading 1610 afterwards, or 3D refusing a drag the plan allows.
 - **Needs:** any browser.
-- **Rides:** § H.6.3 (commit not recorded).
+- **Rides:** `150e57e` (B-ismark/Danmu#189)
 
 ### An office chair goes under a desk only where it clears
 - **Where:** Rectangle: set the desk to 650 mm high and push the office chair under it; raise to ~690 mm and retry; run Fix and Ideas with an ottoman near the coffee table.
