@@ -33,6 +33,8 @@ import {
 import { useStudio, useSettings } from '@/lib/store';
 import { useScene } from '@/lib/scene-store';
 import { moveToNearestWall, putOnFloor } from '@/lib/placement-actions';
+import { joinWallWithNext, splitWallAt } from '@/lib/wall-actions';
+import { wallsInLine } from '@/lib/footprint';
 import { toast } from '@/components/ui/StorageToast';
 import { formatDim } from '@/lib/units';
 import { CATEGORY_ICON, Icon, type IconName } from '@/components/ui/Icon';
@@ -67,6 +69,8 @@ type MenuRequest = {
    *  modifier, and therefore the only one available on a touch screen or under a
    *  window manager that claims Alt for itself. */
   candidates?: string[];
+  /** A wall menu: which wall, and how far along it the press landed (0–1). */
+  wall?: { index: number; t: number };
 };
 
 /** Open the studio context menu at a viewport point. Called from the 3D canvas
@@ -75,6 +79,13 @@ type MenuRequest = {
 export function openSceneMenu(x: number, y: number, partId: string | null, candidates?: string[]) {
   if (typeof window === 'undefined') return;
   window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId, candidates } }));
+}
+
+/** Open the menu for one wall of the plan: split it where it was pressed, or
+ *  join it to a neighbour it runs in line with. */
+export function openWallMenu(x: number, y: number, index: number, t: number) {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent<MenuRequest>(MENU_EVENT, { detail: { x, y, partId: null, wall: { index, t } } }));
 }
 
 /** Open the "which of these did you mean" menu over a stack of overlapping
@@ -218,7 +229,13 @@ export function SceneContextMenu() {
   }, [req, close]);
 
   if (!req) return null;
-  const entries = req.pick ? pickEntries(req.pick) : req.partId ? partEntries(req.partId, req) : roomEntries();
+  const entries = req.pick
+    ? pickEntries(req.pick)
+    : req.wall
+      ? wallEntries(req.wall.index, req.wall.t)
+      : req.partId
+        ? partEntries(req.partId, req)
+        : roomEntries();
   if (entries.length === 0) return null;
 
   function onMenuKey(e: ReactKeyboardEvent<HTMLDivElement>) {
@@ -448,6 +465,23 @@ function partEntries(partId: string, req: MenuRequest): MenuEntry[] {
 }
 
 /** Actions on the room itself — a right-click that landed on floor, wall or air. */
+function wallEntries(index: number, t: number): MenuEntry[] {
+  const fp = useScene.getState().room.footprint;
+  const n = fp.length;
+  const prev = (index - 1 + n) % n;
+  // Not right at a corner: a cut there would leave a sliver nobody could grab, so
+  // a press near either end splits a fifth of the way in instead.
+  const at = Math.min(0.8, Math.max(0.2, t));
+  const out: MenuEntry[] = [
+    { kind: 'item', id: 'split', label: 'Split wall here', icon: 'split', run: () => splitWallAt(index, at) },
+  ];
+  if (wallsInLine(fp, index, (index + 1) % n))
+    out.push({ kind: 'item', id: 'join-next', label: 'Join with the next wall', icon: 'join', run: () => joinWallWithNext(index) });
+  if (wallsInLine(fp, prev, index))
+    out.push({ kind: 'item', id: 'join-prev', label: 'Join with the previous wall', icon: 'join', run: () => joinWallWithNext(prev) });
+  return out;
+}
+
 function roomEntries(): MenuEntry[] {
   const s = useStudio.getState();
   return [

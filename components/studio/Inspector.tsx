@@ -32,11 +32,11 @@ import { SCENE, defaultBodyColor } from '@/lib/scene-palette';
 import { supportsDecor, autoSurfaceDecor, isLightFixture, lightFor, libraryShelf, DECOR_KINDS, type ScenePart, type DecorItem, type DecorKind, type PartLight } from '@/lib/scene-spec';
 import { MOUNT_PAD, restingOn } from '@/lib/physics';
 import { useRoomReport } from './RoomTools';
-import { wallSegments, type Footprint } from '@/lib/footprint';
+import { wallSegments, wallsInLine, type Footprint } from '@/lib/footprint';
 import { wallLabelFor } from '@/lib/wall-label';
 import { brightnessWord, lumensFromPosition, positionFromLumens } from '@/lib/light-units';
 import { describeSpaceRefusal, refuseForSpace, spaceLimits } from '@/lib/space-bound';
-import { moveWallCarrying } from '@/lib/wall-actions';
+import { joinWallWithNext, moveWallCarrying, splitWallAt } from '@/lib/wall-actions';
 import { onPageLeave } from '@/lib/page-leave';
 import { announce } from '@/lib/announce';
 import { fitPartDims } from '@/lib/made-piece';
@@ -740,6 +740,12 @@ function WallInspector({ index }: { index: number }) {
   const segs = wallSegments(room.footprint);
   const seg = segs[index];
   const name = seg ? wallLabelFor(seg.yaw, index, room.footprint.length === 4) : `Wall ${index + 1}`;
+  const n = room.footprint.length;
+  const prev = (index - 1 + n) % n;
+  const joinable = [
+    ...(wallsInLine(room.footprint, prev, index) ? [{ at: prev, label: 'Join with previous' }] : []),
+    ...(wallsInLine(room.footprint, index, (index + 1) % n) ? [{ at: index, label: 'Join with next' }] : []),
+  ];
   const painted = room.wallColors?.[index] !== undefined;
   const current = room.wallColors?.[index] ?? SCENE.wall;
 
@@ -795,6 +801,22 @@ function WallInspector({ index }: { index: number }) {
             <Icon name="minus" size={12} /> In 10 cm
           </button>
         </div>
+      </Section>
+
+      {/* Shape. Splitting is how a room gets an outline no preset has: cut a
+          wall in two and drag one half, and the room grows a step there. */}
+      <Section label="Shape">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          <button onClick={() => splitWallAt(index)} className="ds-btn ds-btn--sm" style={{ fontSize: 'var(--fs-caption)', gap: 6 }}>
+            <Icon name="split" size={12} /> Split in half
+          </button>
+          {joinable.map((j) => (
+            <button key={j.at} onClick={() => joinWallWithNext(j.at)} className="ds-btn ds-btn--sm" style={{ fontSize: 'var(--fs-caption)', gap: 6 }}>
+              <Icon name="join" size={12} /> {j.label}
+            </button>
+          ))}
+        </div>
+        <div className="t-hint" style={{ marginTop: 8 }}>Split a wall, then drag one half to make a step or a bay.</div>
       </Section>
 
     </div>

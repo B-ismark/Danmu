@@ -217,18 +217,20 @@ export const ROOM_SIDE_M = { min: 1, max: 50 } as const;
  *  further", and the piece in the way goes unmentioned. */
 export const ROOM_SIDE_EPS = 1e-6;
 
-/** The shortest a wall may get, and the least gap between two walls that do not
- *  share a corner, in metres — whichever side of them the gap is on.
+/** The least gap between two walls that FACE each other, in metres — the
+ *  narrowest a passage can be and still be somewhere a person goes.
  *
  *  `ROOM_SIDE_M` bounds the room's BOUNDING BOX, and a box cannot see a room fold
  *  over itself: push a T's side wall across its own stem and both sides stay in
- *  range while the floor crosses its own walls. One number serves both halves of
- *  that failure because they are one failure — a neighbour wall shrinking through
- *  zero IS the moved wall passing its own corner. 0.6 m is a walkable passage —
- *  the narrowest a leg of a room can be and still be somewhere a person goes — and
- *  it was chosen by the user over a first 0.3 m, which let a drag leave a wing too
- *  narrow to stand in. The cost is that a drag cannot make a step shallower than
- *  that either; a room saved or opened with one keeps it.
+ *  range while the floor crosses its own walls. Crossing is this gap taken to zero,
+ *  so one number serves both. 0.6 m was chosen by the user over a first 0.3 m,
+ *  which let a drag leave a wing too narrow to stand in.
+ *
+ *  **It no longer bounds a wall's own LENGTH** (2026-11-19). It used to: a
+ *  neighbour wall could not get shorter than this either, which stopped an L from
+ *  being dragged square and a split wall from making a shallow step — the user
+ *  asked for exactly those. A neighbour may now shrink to nothing and come out the
+ *  other side; what is still refused is two walls pinching a passage shut.
  *
  *  Read by `wallTravel` (`lib/footprint.ts`), which both `moveWallCarrying` and the
  *  store's `moveWall` ask, so the wall that stops and the sentence that says why

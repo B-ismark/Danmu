@@ -44,7 +44,7 @@ import { useScene } from '@/lib/scene-store';
 import { useStudio, WALL_DRAG_ID } from '@/lib/store';
 import { SCENE } from '@/lib/scene-palette';
 import { wallSegments } from '@/lib/footprint';
-import { moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
+import { endWallGesture, moveWallCarrying, wallAttachments } from '@/lib/wall-actions';
 
 /** The knob's radius, in metres. */
 const KNOB_R = 0.11;
@@ -121,6 +121,7 @@ export function WallHandles() {
       }
       flush();
       drag.current = null;
+      endWallGesture();
       setDragging(null);
       document.body.style.cursor = '';
     }

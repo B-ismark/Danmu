@@ -397,7 +397,9 @@ describe('a wall will not fold the room over itself', () => {
     const applied = moveWallCarrying(2, -5);
     expect(applied).toBeCloseTo(-(2.25 - 0.6), 6);
     expect(heard).toHaveLength(1);
-    expect(heard[0]).toBe('That wall stops here: the wall beside it cannot get shorter than 60.0 cm.');
+    // The bar is a passage between this wall and the north wall, so it is the gap
+    // that binds — the end wall between them may now be any length.
+    expect(heard[0]).toBe('That wall stops 60.0 cm short of another wall.');
     expect(moveWallCarrying(2, -0.05)).toBe(0);
   });
 

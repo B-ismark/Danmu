@@ -217,20 +217,81 @@ export function offsetWall(poly: Footprint, index: number, delta: number): Footp
   return next;
 }
 
-/** Why a wall stopped short of where it was asked to go: a neighbour wall would get
- *  shorter than `WALL_MIN_M` (`short`), or two walls would come closer than it
- *  (`close`). */
-export type WallFault = 'short' | 'close';
+/** Why a wall stopped short of where it was asked to go: it came closer than
+ *  `WALL_MIN_M` to a wall it FACES — a passage pinched shut. Crossing a wall is the
+ *  same fault taken further, and never reached: the samples along a move are a
+ *  quarter of the minimum apart, so the gap is caught before it can close.
+ *
+ *  There is no third fault for a neighbour getting short, and that is the change of
+ *  2026-11-19: a neighbour wall may shrink to nothing and come out the other side,
+ *  which is how an L is dragged into a rectangle or a bump is pushed out of a
+ *  straight wall. What a person cannot stand in is a passage too narrow to walk
+ *  through, and that is a property of two walls looking at each other, not of how
+ *  long either of them is. */
+export type WallFault = 'close';
 
-function segmentGap(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): number {
-  const cross = (o: [number, number], p: [number, number], q: [number, number]) =>
-    (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
-  const d1 = cross(c, d, a);
-  const d2 = cross(c, d, b);
-  const d3 = cross(a, b, c);
-  const d4 = cross(a, b, d);
-  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
-  const toSeg = (p: [number, number], s: [number, number], e: [number, number]) => {
+type Pt = [number, number];
+
+function cross3(o: Pt, p: Pt, q: Pt): number {
+  return (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+}
+
+function segmentsProperlyCross(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
+  const d1 = cross3(c, d, a);
+  const d2 = cross3(c, d, b);
+  const d3 = cross3(a, b, c);
+  const d4 = cross3(a, b, d);
+  return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+}
+
+/** Relative margin that keeps a projection landing exactly on an end (a step's
+ *  corner squarely beside the wall it left) from reading as "in front of" it. */
+const FACING_T = 1e-6;
+
+/** Distance from `p` to segment s→e, but only when `p` is squarely IN FRONT of the
+ *  segment — its foot falls strictly between the ends. Otherwise Infinity. */
+function facingDistance(p: Pt, s: Pt, e: Pt): number {
+  const ex = e[0] - s[0];
+  const ez = e[1] - s[1];
+  const l2 = ex * ex + ez * ez;
+  if (l2 < 1e-12) return Infinity;
+  const t = ((p[0] - s[0]) * ex + (p[1] - s[1]) * ez) / l2;
+  if (t <= FACING_T || t >= 1 - FACING_T) return Infinity;
+  return Math.hypot(p[0] - (s[0] + t * ex), p[1] - (s[1] + t * ez));
+}
+
+/** How close two walls come where they FACE each other: 0 if they cross, the least
+ *  distance from an end of one to the face of the other otherwise, and Infinity
+ *  when neither looks at the other at all — two walls meeting end to end in a line,
+ *  or a corner diagonally past a corner, are not a passage. */
+function facingGap(a: Pt, b: Pt, c: Pt, d: Pt): number {
+  if (segmentsProperlyCross(a, b, c, d)) return 0;
+  // Two walls that run alongside each other face across the stretch where they
+  // overlap — opposite walls of a rectangle overlap end to end, so no END of
+  // either is strictly in front of the other and the end test alone would let a
+  // room be pressed flat.
+  if (sideBySide(a, b, c, d) || sideBySide(c, d, a, b)) return segmentGap(a, b, c, d);
+  return Math.min(facingDistance(a, c, d), facingDistance(b, c, d), facingDistance(c, a, b), facingDistance(d, a, b));
+}
+
+/** Whether c→d, seen along a→b, covers more than a hair of it. */
+function sideBySide(a: Pt, b: Pt, c: Pt, d: Pt): boolean {
+  const ex = b[0] - a[0];
+  const ez = b[1] - a[1];
+  const l = Math.hypot(ex, ez);
+  if (l < WALL_EDGE_MIN_M) return false;
+  const along = (p: Pt) => ((p[0] - a[0]) * ex + (p[1] - a[1]) * ez) / l;
+  const lo = Math.max(0, Math.min(along(c), along(d)));
+  const hi = Math.min(l, Math.max(along(c), along(d)));
+  return hi - lo > FACING_OVERLAP_M;
+}
+
+/** How much two walls must overlap, seen along one of them, to face each other. */
+const FACING_OVERLAP_M = 1e-6;
+
+function segmentGap(a: Pt, b: Pt, c: Pt, d: Pt): number {
+  if (segmentsProperlyCross(a, b, c, d)) return 0;
+  const toSeg = (p: Pt, s: Pt, e: Pt) => {
     const ex = e[0] - s[0];
     const ez = e[1] - s[1];
     const l2 = ex * ex + ez * ez;
@@ -240,18 +301,13 @@ function segmentGap(a: [number, number], b: [number, number], c: [number, number
   return Math.min(toSeg(a, c, d), toSeg(b, c, d), toSeg(c, a, b), toSeg(d, a, b));
 }
 
-/** Everything moving wall `index` can shrink, in a fixed order: the two neighbour
- *  walls' lengths, then the gap from each of the three walls that move (the wall
- *  and the two that stretch with it) to every wall that shares no corner with it. */
-function wallWatch(poly: Footprint, index: number): Array<{ fault: WallFault; v: number }> {
+/** Everything moving wall `index` can pinch, in a fixed order: the gap from each of
+ *  the three walls that move (the wall and the two that stretch with it) to every
+ *  wall that shares no corner with it. Infinity where the two do not face. */
+function wallWatch(poly: Footprint, index: number): number[] {
   const n = poly.length;
   const at = (k: number) => ((k % n) + n) % n;
-  const edge = (k: number): [[number, number], [number, number]] => [poly[at(k)], poly[at(k + 1)]];
-  const out: Array<{ fault: WallFault; v: number }> = [];
-  for (const k of [index - 1, index + 1]) {
-    const [a, b] = edge(k);
-    out.push({ fault: 'short', v: Math.hypot(b[0] - a[0], b[1] - a[1]) });
-  }
+  const out: number[] = [];
   const seen = new Set<string>();
   for (const e of new Set([at(index - 1), at(index), at(index + 1)])) {
     for (let f = 0; f < n; f++) {
@@ -259,63 +315,61 @@ function wallWatch(poly: Footprint, index: number): Array<{ fault: WallFault; v:
       const key = e < f ? `${e},${f}` : `${f},${e}`;
       if (seen.has(key)) continue;
       seen.add(key);
-      const [a, b] = edge(e);
-      const [c, d] = edge(f);
-      out.push({ fault: 'close', v: segmentGap(a, b, c, d) });
+      out.push(facingGap(poly[e], poly[at(e + 1)], poly[f], poly[at(f + 1)]));
     }
   }
   return out;
 }
 
-/** Whether any two walls that share no corner cross or touch. */
+/** Whether any two walls that share no corner cross. */
 function foldedAnywhere(poly: Footprint): boolean {
   const n = poly.length;
   for (let e = 0; e < n; e++) {
     for (let f = e + 2; f < n; f++) {
       if (e === 0 && f === n - 1) continue;
-      if (segmentGap(poly[e], poly[(e + 1) % n], poly[f], poly[(f + 1) % n]) === 0) return true;
+      if (segmentsProperlyCross(poly[e], poly[(e + 1) % n], poly[f], poly[(f + 1) % n])) return true;
     }
   }
   return false;
 }
 
-/** Sampling interval along a move, well under `WALL_MIN_M`: each quantity
- *  `wallWatch` reads changes by at most twice the distance travelled, so a step this
- *  size cannot carry a wall from clear of the minimum to through another wall
- *  without a sample landing in between. That is what catches a single large step —
- *  a brisk drag at the plan's lowest zoom, or a typed jump — which a check of the
- *  END position alone would pass, the moved wall having landed clear on the far
- *  side of the wall it went through. */
+/** Sampling interval along a move, well under `WALL_MIN_M`: a facing gap changes by
+ *  at most twice the distance travelled, so a step this size cannot carry a wall
+ *  from clear of the minimum to through another wall without a sample landing in
+ *  between. That is what catches a single large step — a brisk drag at the plan's
+ *  lowest zoom, or a typed jump — which a check of the END position alone would
+ *  pass, the moved wall having landed clear on the far side of the wall it went
+ *  through. */
 const WALL_SAMPLE_M = WALL_MIN_M / 4;
 
 /**
- * How much of `delta` wall `index` can travel with the room still a room: no wall
- * shorter than `WALL_MIN_M`, and no two walls that do not share a corner closer
- * than it. `travel` is `delta` itself when the whole move fits, and otherwise the
- * part of it up to the first point that would break a rule, with `fault` naming it.
+ * How much of `delta` wall `index` can travel with the room still a room: no two
+ * walls that face each other closer than `WALL_MIN_M` (crossing is closer still). `travel`
+ * is `delta` itself when the whole move fits, and otherwise the part of it up to the
+ * first point that would break a rule, with `fault` naming it.
  *
  * **Only a move that makes a quantity WORSE is stopped.** A room that already
  * breaks a rule — saved before this existed, or opened from a file — can still be
  * dragged back out of it; stopping every move there would freeze exactly the room
  * that most needs mending. A room already folded over itself is not judged at all
  * until it is unfolded (see `foldedAnywhere`).
+ *
+ * A wall pushed clean through the one opposite it in a single step needs no rule of
+ * its own: the two face each other the whole way, and the samples land inside the
+ * gap long before the far side.
  */
 export function wallTravel(poly: Footprint, index: number, delta: number): { travel: number; fault: WallFault | null } {
   if (delta === 0 || poly.length < 3 || index < 0 || index >= poly.length) return { travel: delta, fault: null };
-  // A room already FOLDED — two walls crossing — is left to the user entirely.
-  // Mending one passes a wall through zero length and out the far side (the spike
-  // a fold leaves shrinks, vanishes and grows again the right way round), and
-  // "never shorter than it was" would forbid exactly that. The rule comes back on
-  // the first move after the room is a room again.
   if (foldedAnywhere(poly)) return { travel: delta, fault: null };
   const base = wallWatch(poly, index);
   const faultAt = (t: number): WallFault | null => {
-    const now = wallWatch(offsetWall(poly, index, t), index);
+    const moved = offsetWall(poly, index, t);
+    const now = wallWatch(moved, index);
     for (let i = 0; i < now.length; i++) {
       // Strictly under the minimum, so the search lands ON it rather than a
       // tolerance inside it; the tolerance is only on "worse than before", which is
       // what lets a wall already sitting on the minimum by float drift move along it.
-      if (now[i].v < WALL_MIN_M && now[i].v < base[i].v - ROOM_SIDE_EPS) return now[i].fault;
+      if (now[i] < WALL_MIN_M && now[i] < base[i] - ROOM_SIDE_EPS) return 'close';
     }
     return null;
   };
@@ -338,6 +392,184 @@ export function wallTravel(poly: Footprint, index: number, delta: number): { tra
     return { travel: Math.abs(lo) <= ROOM_SIDE_EPS ? 0 : lo, fault };
   }
   return { travel: delta, fault: null };
+}
+
+// ─── Reshaping: split, step, tidy ───────────────────────────────────────────
+
+/** Shorter than this, a wall is not a wall: `wallSegments` draws nothing for it,
+ *  and `tidyFootprint` takes it out. */
+export const WALL_EDGE_MIN_M = 1e-4;
+
+/** Where each wall went in a reshape: `map[old] = new` wall index, or -1 for a wall
+ *  that no longer exists. Wall colours and the selected wall are keyed by index, so
+ *  a reshape that does not say where its walls went paints the wrong ones. */
+export type WallMap = number[];
+
+/** What a reshape produced: the outline, where the old walls went, and — for a
+ *  split — which wall each new one was made from (`from[new] = old`). */
+export type Reshape = { footprint: Footprint; map: WallMap; from: number[] };
+
+function identity(n: number): Reshape['map'] {
+  return Array.from({ length: n }, (_, i) => i);
+}
+
+/** Two reshapes one after the other. */
+function compose(first: Reshape, second: Reshape): Reshape {
+  return {
+    footprint: second.footprint,
+    map: first.map.map((m) => (m < 0 ? -1 : second.map[m])),
+    from: second.from.map((m) => (m < 0 ? -1 : first.from[m])),
+  };
+}
+
+/** Put a second copy of corner `v` into the outline: a wall of length zero appears
+ *  at index `v`, and every wall from `v` on moves up one. */
+function duplicateCorner(poly: Footprint, v: number): Reshape {
+  const n = poly.length;
+  const footprint: Footprint = [...poly.slice(0, v + 1), poly[v], ...poly.slice(v + 1)].map((p) => [p[0], p[1]]);
+  const map = identity(n).map((e) => (e < v ? e : e + 1));
+  const from = identity(n + 1).map((e) => (e <= v ? e : e - 1));
+  // The zero-length wall at `v` stands where wall v-1 ended; it inherits nothing of
+  // its own and is reported as made from the wall it will step away from.
+  return { footprint, map, from };
+}
+
+/**
+ * Divide wall `index` in two at fraction `t` of the way along it (0 < t < 1).
+ * The halves are walls `index` and `index + 1`; each can then be dragged on its
+ * own, which is how a person gets a shape no preset has — push half a wall out and
+ * the room grows a bay. Returns null when the cut would leave a piece shorter than
+ * `WALL_EDGE_MIN_M`, which is no wall at all.
+ */
+export function splitWall(poly: Footprint, index: number, t = 0.5): Reshape | null {
+  const n = poly.length;
+  if (n < 3 || index < 0 || index >= n || !(t > 0 && t < 1)) return null;
+  const a = poly[index];
+  const b = poly[(index + 1) % n];
+  const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+  if (len * Math.min(t, 1 - t) < WALL_EDGE_MIN_M) return null;
+  const cut: Pt = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+  const footprint: Footprint = [...poly.slice(0, index + 1), cut, ...poly.slice(index + 1)].map((p) => [p[0], p[1]]);
+  const map = identity(n).map((e) => (e <= index ? e : e + 1));
+  const from = identity(n + 1).map((e) => (e <= index ? e : e - 1));
+  return { footprint, map, from };
+}
+
+/** Whether walls `i` and `j` run the same way along one line through their shared
+ *  corner — the two halves of a split wall. */
+export function wallsInLine(poly: Footprint, i: number, j: number): boolean {
+  const n = poly.length;
+  const a = poly[i];
+  const b = poly[(i + 1) % n];
+  const c = poly[j];
+  const d = poly[(j + 1) % n];
+  const ux = b[0] - a[0];
+  const uz = b[1] - a[1];
+  const vx = d[0] - c[0];
+  const vz = d[1] - c[1];
+  const lu = Math.hypot(ux, uz);
+  const lv = Math.hypot(vx, vz);
+  if (lu < WALL_EDGE_MIN_M || lv < WALL_EDGE_MIN_M) return false;
+  return Math.abs(ux * vz - uz * vx) <= 1e-6 * lu * lv && ux * vx + uz * vz > 0;
+}
+
+/**
+ * Get wall `index` ready to move. Where a neighbour runs in line with it — the
+ * other half of a split wall — offsetting the shared corner would SLANT that
+ * neighbour, which is a wall nobody asked for at an angle nobody chose. Instead
+ * the corner is doubled, so the move grows a new wall square to both: a step.
+ * The outline is otherwise unchanged (the new walls have length zero until the
+ * move), and `map[index]` is where the wall being moved now is.
+ */
+export function prepareWallMove(poly: Footprint, index: number): Reshape {
+  let r: Reshape = { footprint: poly, map: identity(poly.length), from: identity(poly.length) };
+  const n = poly.length;
+  if (n < 3 || index < 0 || index >= n) return r;
+  // The corner AFTER first: doubling it never shifts the wall's own index unless it
+  // is corner 0 (the last wall's far end), which `map` accounts for either way.
+  if (wallsInLine(poly, index, (index + 1) % n)) r = compose(r, duplicateCorner(r.footprint, (r.map[index] + 1) % r.footprint.length));
+  if (wallsInLine(poly, (index - 1 + n) % n, index)) r = compose(r, duplicateCorner(r.footprint, r.map[index]));
+  return r;
+}
+
+/** Take out every wall shorter than `WALL_EDGE_MIN_M`, merging its two corners —
+ *  what a step dragged back to nothing leaves behind. Walls in line are kept as
+ *  two: a split the person made is theirs to join. */
+export function tidyFootprint(poly: Footprint): Reshape {
+  let r: Reshape = { footprint: poly, map: identity(poly.length), from: identity(poly.length) };
+  for (;;) {
+    const fp = r.footprint;
+    const n = fp.length;
+    if (n <= 3) return r;
+    let k = -1;
+    for (let i = 0; i < n; i++) {
+      const a = fp[i];
+      const b = fp[(i + 1) % n];
+      if (Math.hypot(b[0] - a[0], b[1] - a[1]) < WALL_EDGE_MIN_M) {
+        k = i;
+        break;
+      }
+    }
+    if (k < 0) return r;
+    r = compose(r, removeWall(fp, k));
+  }
+}
+
+/** Drop wall `k` by removing its far corner: the wall before it keeps its index,
+ *  the wall after it now starts where wall `k` started. */
+function removeWall(poly: Footprint, k: number): Reshape {
+  const n = poly.length;
+  const gone = (k + 1) % n;
+  const footprint: Footprint = poly.filter((_, i) => i !== gone).map((p) => [p[0], p[1]]);
+  // Corner `gone` was the start of wall `gone`; with it removed, wall `k` runs from
+  // corner k to what was corner gone+1 — it IS the old wall `gone`, made longer by
+  // a length under a tenth of a millimetre. So `k` disappears and `gone` takes its
+  // slot (when gone is 0, everything shifts down one and the old last wall stays last).
+  const map = identity(n).map((e) => {
+    if (e === k) return -1;
+    if (gone === 0) return e === 0 ? n - 2 : e - 1;
+    return e < gone ? e : e - 1;
+  });
+  const from = identity(n - 1).map((e) => map.indexOf(e));
+  return { footprint, map, from };
+}
+
+/**
+ * Join wall `index` with the next wall when the two run in line — undoing a split.
+ * Null when they do not.
+ */
+export function joinWalls(poly: Footprint, index: number): Reshape | null {
+  const n = poly.length;
+  if (n <= 3 || index < 0 || index >= n) return null;
+  const next = (index + 1) % n;
+  if (!wallsInLine(poly, index, next)) return null;
+  // Remove the shared corner: wall `index` now runs to where `next` ended.
+  const footprint: Footprint = poly.filter((_, i) => i !== next).map((p) => [p[0], p[1]]);
+  // The joined wall is wall `index` made longer, so it keeps `index`'s own record
+  // (its paint): `next` maps to nothing. Mapping both onto one slot let the record's
+  // key order pick the survivor, so a join painted differently depending on whether
+  // the seam fell at corner 0.
+  const map = identity(n).map((e) => {
+    if (e === next) return -1;
+    if (next === 0) return e - 1;
+    return e < next ? e : e - 1;
+  });
+  const from = identity(n - 1).map((e) => map.indexOf(e));
+  return { footprint, map, from };
+}
+
+/** Re-key a wall-indexed record through a reshape: keys of removed walls go, a new
+ *  wall takes the value of the wall it was made from when it has none of its own. */
+export function remapWallRecord<T>(rec: Readonly<Record<number, T>>, r: Pick<Reshape, 'map' | 'from'>): Record<number, T> {
+  const out: Record<number, T> = {};
+  for (const [k, v] of Object.entries(rec)) {
+    const m = r.map[Number(k)];
+    if (m !== undefined && m >= 0) out[m] = v;
+  }
+  r.from.forEach((old, nw) => {
+    if (out[nw] === undefined && old >= 0 && rec[old] !== undefined) out[nw] = rec[old];
+  });
+  return out;
 }
 
 export function polygonCentroid(poly: Footprint): [number, number] {
@@ -603,7 +835,7 @@ export function wallSegments(
     const mx = (a[0] + b[0]) / 2;
     const mz = (a[1] + b[1]) / 2;
     const len = Math.hypot(b[0] - a[0], b[1] - a[1]);
-    if (len < 1e-4) continue;
+    if (len < WALL_EDGE_MIN_M) continue;
     // Inward is the negated OUTWARD normal, which reads the polygon's winding —
     // not its own perpendicular flipped toward `polygonCentroid`, which is what
     // this did and what `wallOutwardNormal` two hundred lines up was fixed for.
