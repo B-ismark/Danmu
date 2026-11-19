@@ -32,14 +32,27 @@ export type DetectSource = 'local' | 'cloud' | 'manual';
 /** The bar `conf` must clear, per source. `'always'` means the source does not
  *  report a confidence worth testing.
  *
- *  Local and cloud share a number on purpose — see the note above. The split that
- *  matters is what the number is WORTH, and for cloud the answer is "not much", so
- *  the corroboration check below is what actually gates it. */
+ *  **Local used to share cloud's 0.85, and that ticked nothing.** Measured on eight
+ *  runs of four real photographed rooms (two lenses each), 11 of 180 rows started
+ *  ticked, and three runs ticked none — so Continue built an empty room and the
+ *  review was a long tick-everything chore. The comment that number sat under
+ *  already said why: a local score is a real class score and most true positives
+ *  sit below 0.85. Among rows the geometry measured and agreed with (`'ok'`), those
+ *  scoring 0.5–0.85 were right about as often as those above, judged by eye against
+ *  the photos — one wrong in the hotel (a luggage rack read as a stool), at most
+ *  one in each of the others. Below 0.5 they were not (the hotel's painting read as
+ *  a curtain at 0.36). So the bar is 0.5, and the
+ *  corroboration requirement below does the real gating. Rows nothing measured stay
+ *  unticked whatever they score: the ones above 0.7 in that test were pendant
+ *  lamps, one of them hanging in the next room.
+ *
+ *  Cloud keeps 0.85 — its number is a self-report, and moving it would be a guess
+ *  dressed as calibration (see the note above). */
 const AUTO_CONFIRM: Record<DetectSource, number | 'always'> = {
   // The user drew the box. There is nothing here for them to confirm.
   manual: 'always',
-  // A class score, and a real one. Most true positives sit below this.
-  local: 0.85,
+  // A class score, and a real one. Measured, not chosen — see above.
+  local: 0.5,
   // Kept rather than raised. A tighter bar on a compressed self-report is theatre.
   cloud: 0.85,
 };

@@ -168,10 +168,145 @@ export function calForPhoto(f: PhotoFacts, slot: CaptureSlot, footprint: Footpri
   if (picked !== null) {
     const cal: CameraCal = { ...calFromHfov(picked.hfov, f.aspect, view), lens: picked.lens };
     if (view.height !== undefined || f.floorLine === null) return cal;
-    return fitHeightToFloorLine(f.floorLine, slot, footprint, cal) ?? cal;
+    const fit = fitHeightToFloorLine(f.floorLine, slot, footprint, cal);
+    if (fit === null) return cal;
+    // Below a standing height, a fit is believed only where the floor would have
+    // been in view anyway (`floorInFrameStanding`).
+    if (fit.height! < STANDING_MIN_HEIGHT && !floorInFrameStanding(slot, footprint, cal)) return cal;
+    return fit;
   }
   const solved = f.floorLine !== null ? calibrateFromFloorLine(f.floorLine, slot, footprint, f.aspect, view) : null;
   return solved ?? { ...defaultCal(f.aspect), ...view };
+}
+
+/** The lowest height a person standing up holds a phone at to photograph a wall.
+ *  A fitted height below it is believed only where the floor was in view anyway. */
+const STANDING_MIN_HEIGHT = 1.2;
+
+/**
+ * Whether the wall's foot would be in the picture for someone standing up to take
+ * it: this lens, this tilt, the assumed height.
+ *
+ * `findFloorLine` returns the strongest horizontal edge in the lower part of the
+ * frame, and it always finds one. On an ordinary 1x lens a level phone at chest
+ * height 2–3 m from a wall does not show the floor junction at all, so the edge it
+ * finds can be the top of a sofa, a headboard or a sill — and solving the camera
+ * height from that edge puts the camera at knee height.
+ *
+ * The geometry alone cannot tell those apart from a camera that really was lower:
+ * where the junction is out of frame at 1.5 m, ANY line in the frame implies a
+ * camera below 1.5 m. So `calForPhoto` asks this only of a fit below
+ * `STANDING_MIN_HEIGHT` — a phone held a little low (1.3 m, which
+ * `tests/scan-tilted-room.test.ts` is built around) keeps its measurement, and a
+ * knee-height answer from a frame that could not show the floor is refused.
+ *
+ * Field test, four real rooms, true heights read off the source panoramas: every
+ * fit this refuses there was below 1.1 m — four of five were furniture (0.84–1.05 m
+ * against true 1.4–1.5 m; every floor piece is sized in proportion, so a third too
+ * small) and one was a camera genuinely held at about 0.9 m, which now falls back
+ * to the 1.5 m guess. A person standing with a phone is the case this app is for.
+ *
+ * The bound is "in the frame at all" rather than `findFloorLine`'s own search band,
+ * on purpose: the band is a detail of the finder, and this is a statement about
+ * the room.
+ */
+function floorInFrameStanding(slot: CaptureSlot, footprint: Footprint, cal: CameraCal): boolean {
+  const frame = wallFrame(slot, footprint);
+  if (!frame) return false;
+  const row = wallRowAtHeight(0, frame.distance, { ...cal, height: CAM_HEIGHT });
+  return row !== null && row < 1;
+}
+
+/** How far apart, as a ratio, two fitted camera heights may be and still be read
+ *  as the same person's hands. A person does not change height by a fifth between
+ *  turning to one wall and the next. */
+const SHARED_HEIGHT_RATIO = 1.2;
+
+/**
+ * Every photo's camera, read as ONE camera: the person stands in one spot and turns,
+ * so the phone is at the same height in all four shots, and a height the photos
+ * agree on is evidence about the others.
+ *
+ * Per photo this is `calForPhoto`. Then the heights the photos fitted off a floor
+ * line (a known lens, no height from the phone) are looked at together. The set has
+ * a height only when the photos AGREE: the largest group of fits within
+ * `SHARED_HEIGHT_RATIO` of each other must hold at least two of them and a strict
+ * majority. Its median is the set's height, and it is handed to:
+ *
+ *   · a photo with a lens that measured nothing — no floor line, or a fit
+ *     `calForPhoto` refused — which otherwise takes the flat 1.5 m guess;
+ *   · a photo with neither lens nor usable line, which is otherwise the typical
+ *     lens at 1.5 m;
+ *   · a photo whose own fit falls outside the agreeing group: the majority outvotes it.
+ *
+ * Left alone:
+ *   · a height the phone gave (`view.height`): it is the person's;
+ *   · a photo with no lens that spent its own line on its lens
+ *     (`calibrateFromFloorLine`). Its line ties its height to its lens, and
+ *     `atLens` re-solves the height from it when the lens is doubted
+ *     (`lib/repeat-sightings.ts`); a shared height would cut that tie.
+ *   · everything, when the fits do not agree. Two readings that disagree cannot say
+ *     which one misread its line, and a blend of them is a height nobody measured.
+ *
+ * A shared height is not a measurement OF that photo, so its cal carries no
+ * `floorLine` and `atLens` keeps it as given on another lens.
+ *
+ * Field test, eight runs over four real rooms: where two ultrawide fits were both
+ * the floor they agreed within 5% (1.46 / 1.39, true ~1.4). Where one was a sofa
+ * top (1.46 / 1.01, true ~1.5) the first version of this took their median, 1.24,
+ * and handed it to two photos that were better off at 1.5 — which is why agreement
+ * is required now.
+ */
+export function calsForRoom(
+  photos: Partial<Record<CaptureSlot, PhotoFacts>>,
+  footprint: Footprint,
+): Partial<Record<CaptureSlot, CameraCal>> {
+  const out: Partial<Record<CaptureSlot, CameraCal>> = {};
+  const fits: { slot: CaptureSlot; height: number }[] = [];
+  const slots = Object.keys(photos) as CaptureSlot[];
+  for (const slot of slots) {
+    const f = photos[slot]!;
+    const cal = calForPhoto(f, slot, footprint);
+    out[slot] = cal;
+    // A fitted height is the only kind with both a lens and a floor line on it: a
+    // phone's height keeps no line, and a lens-less line solved the lens.
+    if (cal.lens !== undefined && cal.floorLine !== undefined && cal.height !== undefined) {
+      fits.push({ slot, height: cal.height });
+    }
+  }
+  const agreeing = largestAgreeingGroup(fits.map((x) => x.height));
+  if (agreeing.length < 2 || agreeing.length * 2 <= fits.length) return out;
+  const shared = median(agreeing);
+  const lo = agreeing[0];
+  const hi = agreeing[agreeing.length - 1];
+  for (const slot of slots) {
+    const f = photos[slot]!;
+    const cal = out[slot]!;
+    if (f.view.height !== undefined) continue;
+    const own = fits.find((x) => x.slot === slot)?.height;
+    if (own !== undefined && own >= lo && own <= hi) continue;
+    if (own === undefined && cal.lens === undefined && cal.floorLine !== undefined) continue;
+    out[slot] = calForPhoto({ ...f, view: { ...f.view, height: shared } }, slot, footprint);
+  }
+  return out;
+}
+
+/** The largest run of values (sorted ascending) whose largest is within
+ *  `SHARED_HEIGHT_RATIO` of its smallest; the lowest such run on a tie. */
+function largestAgreeingGroup(xs: number[]): number[] {
+  const s = [...xs].sort((a, b) => a - b);
+  let best: number[] = [];
+  for (let i = 0, j = 0; j < s.length; j++) {
+    while (s[j] > s[i] * SHARED_HEIGHT_RATIO) i++;
+    if (j - i + 1 > best.length) best = s.slice(i, j + 1);
+  }
+  return best;
+}
+
+function median(xs: number[]): number {
+  const s = [...xs].sort((a, b) => a - b);
+  const m = s.length >> 1;
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
 const heightOf = (cal: CameraCal) => cal.height ?? CAM_HEIGHT;

@@ -125,9 +125,10 @@ export default function CapturePage() {
   // with no way to change it. The geometry assumes the standard chest-height rig
   // (`CAM_HEIGHT`, 1.5 m). Only when a lens is known (EXIF or a vanishing-point
   // estimate) does the detect screen fit the real height to the wall-floor line
-  // (`calForPhoto` in `lib/photo-geometry.ts`); with no lens, that same line solves
-  // the focal length instead and the height stays 1.5 m. Old captures that already
-  // carry `pose.heightM` keep it.
+  // (`calForPhoto` in `lib/photo-geometry.ts`), and a height the photos agree on is
+  // shared with the ones that measured none (`calsForRoom`); with no lens, that same
+  // line solves the focal length instead, at 1.5 m. Old captures that already carry
+  // `pose.heightM` keep it.
   const { tilt, requestAccess } = useDeviceTilt();
 
   // Mirror of `photos` readable from async handlers, so replacing or removing a

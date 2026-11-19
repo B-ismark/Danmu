@@ -37,7 +37,7 @@ import { toRecord } from '@/lib/detection-record';
 import { clampDims } from '@/lib/dimension-ranges';
 import { buildSceneFromRoom, defaultDepthFor, type Category, type Shape } from '@/lib/scene-spec';
 import { anchorFor, CURTAIN_STANDOFF } from '@/lib/physics';
-import { calForPhoto, calFromHfov, wallFrame, wallRowAtHeight, type CameraCal } from '@/lib/photo-geometry';
+import { calsForRoom, calFromHfov, wallFrame, wallRowAtHeight, type CameraCal } from '@/lib/photo-geometry';
 import { footprintForLayout } from '@/lib/footprint';
 import { PRESET_HEIGHT, presetById } from '@/lib/room-presets';
 import type { Detection } from '@/lib/detection';
@@ -213,25 +213,23 @@ function run(known: Known): Row[] {
   if (known.whole && !known.lens) throw new Error('whole boxes are a wider lens, so they need the lens');
   const room = known.room ? TRUE_ROOM : SKIPPED_ROOM;
   const scale = (slot: CaptureSlot) => (known.whole ? wholeScale(slot) : 1);
-  const cals: CalMap = {};
+  // The detect screen's own call: every photo's facts, reconciled as one camera.
+  const photos: Parameters<typeof calsForRoom>[0] = {};
   for (const slot of SLOTS) {
     const truth = trueCal(slot);
     const line = visibleFloorLine(slot);
-    cals[slot] = calForPhoto(
-      {
-        aspect: ASPECT,
-        view: {
-          ...(known.tilt ? { tiltRad: truth.tiltRad } : {}),
-          ...(known.height ? { height: TRUE_HEIGHT } : {}),
-        },
-        exifHfov: known.lens ? hfovOf(truth.k * scale(slot)) : null,
-        vanishing: null,
-        floorLine: line === null ? null : 0.5 + (line - 0.5) / scale(slot),
+    photos[slot] = {
+      aspect: ASPECT,
+      view: {
+        ...(known.tilt ? { tiltRad: truth.tiltRad } : {}),
+        ...(known.height ? { height: TRUE_HEIGHT } : {}),
       },
-      slot,
-      room.footprint,
-    );
+      exifHfov: known.lens ? hfovOf(truth.k * scale(slot)) : null,
+      vanishing: null,
+      floorLine: line === null ? null : 0.5 + (line - 0.5) / scale(slot),
+    };
   }
+  const cals: CalMap = calsForRoom(photos, room.footprint);
   const seen = PIECES.map((piece) => ({
     piece,
     box: known.whole ? inWiderFrame(rawBoxOf(piece), scale(piece.slot)) : boxOf(piece),
