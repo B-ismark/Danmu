@@ -1,0 +1,6 @@
+SLOTS hotel-room ultrawide order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 40 s
+initially kept: 4 of 26 pieces kept
+rows offered: 26
+status: 26 of 26 pieces kept
+room c6fd8b12-a809-4135-be3b-1f52db603f90 saved → runs/hotel-room-ultrawide-1234

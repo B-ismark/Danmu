@@ -1,0 +1,6 @@
+SLOTS family-lounge ultrawide order=1234: Wall 1←wall1  Wall 2←wall2  Wall 3←wall3  Wall 4←wall4  (4/4 right)
+detect took 39 s
+initially kept: 10 of 32 pieces kept
+rows offered: 32
+status: 32 of 32 pieces kept
+room fc4c755c-a678-454d-afce-15aac9bb3e0d saved → runs/family-lounge-ultrawide-1234

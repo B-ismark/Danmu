@@ -1,0 +1,116 @@
+[
+ {
+  "label": "Armchair",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Armchair Wall 1 Seen this already? Left out: its size in this photo does not fit a armchair. Tick it if it is one Show"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 2 Seen this already? Left out: its size in this photo does not fit a sofa. Tick it if it is one Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Coffee table Wall 2 Seen this already? Left out: its size in this photo does not fit a coffee table. Tick it if it is one Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Potted plant Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Potted plant Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Coffee table Wall 2 Seen this already? Left out: its size in this photo does not fit a coffee table. Tick it if it is one Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 3 Seen this already? Left out: its size in this photo does not fit a painting. Tick it if it is one Show"
+ },
+ {
+  "label": "Armchair",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Armchair Wall 3 Seen this already? Left out: its size in this photo does not fit a armchair. Tick it if it is one Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 3 Seen this already? Left out: its size in this photo does not fit a painting. Tick it if it is one Show"
+ },
+ {
+  "label": "Armchair",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Armchair Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Chair",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chair Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Chest of drawers",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chest of drawers Wall 4 Seen this already? Left out: its size in this photo does not fit a wardrobe. Tick it if it is one"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 4 Seen this already? Left out: its size in this photo does not fit a sofa. Tick it if it is one"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Potted plant Wall 4 Seen this already?"
+ }
+]

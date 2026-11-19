@@ -1,0 +1,254 @@
+[
+ {
+  "label": "Microwave oven",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Microwave oven Wall 1 Seen this already? Left out: its size in this photo does not fit a microwave. Tick it if it is one Show"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Curtain Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Lamp Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Desk",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Desk Wall 1 Seen this already? Left out: its size in this photo does not fit a dining table. Tick it if it is one Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 1 Seen this already? Left out: its size in this photo does not fit a floor lamp. Tick it if it is one Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Cabinet",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Cabinet Wall 1 Seen this already? Left out: its size in this photo does not fit a wardrobe. Tick it if it is one Show"
+ },
+ {
+  "label": "Bed",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Bed Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Desk",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Desk Wall 1 Seen this already? Left out: its size in this photo does not fit a dining table. Tick it if it is one Show"
+ },
+ {
+  "label": "Window",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Window Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Television",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Television Wall 1 Seen this already? Show"
+ },
+ {
+  "label": "Bed",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Bed Wall 2 Seen this already? Left out: its size in this photo does not fit a bed. Tick it if it is one Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Lamp Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Lamp Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Nightstand",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Nightstand Wall 2 Seen this already? Left out: its size in this photo does not fit a nightstand. Tick it if it is one Show"
+ },
+ {
+  "label": "Nightstand",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Nightstand Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Window",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Window Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 2 Seen this already? Show"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 2 Seen this already? Left out: its size in this photo does not fit a sofa. Tick it if it is one Show"
+ },
+ {
+  "label": "Mirror",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Mirror Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 3 Same sofa as on Wall 4? Yes, same one No, it’s another Seen this already? Show"
+ },
+ {
+  "label": "Potted plant",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Potted plant Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Armchair",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Armchair Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Cabinet",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Cabinet Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Coffee table",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Coffee table Wall 3 Seen this already? Left out: its size in this photo does not fit a coffee table. Tick it if it is one Show"
+ },
+ {
+  "label": "Door",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Door Wall 3 Seen this already? Left out: its size in this photo does not fit a door. Tick it if it is one Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Window",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Window Wall 3 Seen this already? Left out: its size in this photo does not fit a window. Tick it if it is one Show"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 3 Seen this already? Show"
+ },
+ {
+  "label": "Mirror",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Mirror Wall 4 Seen this already? Left out: its size in this photo does not fit a mirror. Tick it if it is one"
+ },
+ {
+  "label": "Desk",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Desk Wall 4 Seen this already? Left out: its size in this photo does not fit a dining table. Tick it if it is one"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 4 Seen this already? Left out: its size in this photo does not fit a floor lamp. Tick it if it is one"
+ },
+ {
+  "label": "Sofa",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Sofa Wall 4 Seen this already? Left out: its size in this photo does not fit a sofa. Tick it if it is one"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 4 Seen this already? Left out: its size in this photo does not fit a curtain. Tick it if it is one"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "true",
+  "title": "Kept: this piece goes into your room at a typical size",
+  "text": "Picture frame Wall 4 Seen this already?"
+ },
+ {
+  "label": "Nightstand",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Nightstand Wall 4 Seen this already? Left out: its size in this photo does not fit a nightstand. Tick it if it is one"
+ },
+ {
+  "label": "Lamp",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Lamp Wall 4 Seen this already? Left out: its size in this photo does not fit a floor lamp. Tick it if it is one"
+ },
+ {
+  "label": "Chair",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Chair Wall 4 Seen this already?"
+ },
+ {
+  "label": "Bed",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Bed Wall 4 Seen this already?"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 4 Seen this already?"
+ }
+]

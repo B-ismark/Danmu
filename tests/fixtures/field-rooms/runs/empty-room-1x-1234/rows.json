@@ -1,0 +1,62 @@
+[
+ {
+  "label": "Window",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Window Wall 1 Show"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 1 Show"
+ },
+ {
+  "label": "Curtain",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Curtain Wall 1 Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 2 Left out: its size in this photo does not fit a painting. Tick it if it is one Show"
+ },
+ {
+  "label": "Wall art",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Wall art Wall 3 Show"
+ },
+ {
+  "label": "Door",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Door Wall 3 Left out: its size in this photo does not fit a door. Tick it if it is one Show"
+ },
+ {
+  "label": "Picture frame",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Picture frame Wall 4 Left out: its size in this photo does not fit a painting. Tick it if it is one"
+ },
+ {
+  "label": "Washing machine",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Washing machine Wall 4 Left out: its size in this photo does not fit a washing machine. Tick it if it is one"
+ },
+ {
+  "label": "Wall art",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Wall art Wall 4"
+ },
+ {
+  "label": "Poster",
+  "pressed": "false",
+  "title": "Not kept: it stays on this list and out of your room",
+  "text": "Poster Wall 4 Same wall art as on Wall 4? Yes, same one No, it’s another"
+ }
+]
