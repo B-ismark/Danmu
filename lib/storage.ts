@@ -68,6 +68,8 @@ function reportQuota(e: unknown) {
  *  updater returns, so handing back a missing record would store `undefined` under
  *  its key, and a rename of a deleted room would leave a key behind. */
 const NO_ROOM = Symbol('no room');
+/** Thrown from inside an `update` when the edit changed nothing, so nothing is written. */
+const UNCHANGED = Symbol('unchanged');
 
 // IndexedDB-backed room data: captures (blobs), detections, scene parts, transforms.
 // Single-room v0.1. Keys are namespaced by roomId.
@@ -187,8 +189,10 @@ export function migrateRoom(rec: RoomData): RoomData {
 
 /** A stored room record after an edit: migrated first, so the edit sees the current
  *  schema, and stamped current after. The room's two writers (`editRoom` and
- *  `savePending`) both write through this, so neither can stamp the version without
- *  migrating — the rename bug `migrateRoom`'s note describes, one writer over. */
+ *  `savePending`) both migrate before they stamp — `savePending` through this, `editRoom`
+ *  writing the same two steps out so it can tell an edit that changed nothing — so neither
+ *  can stamp the version without migrating: the rename bug `migrateRoom`'s note describes,
+ *  one writer over. */
 function rewritten(old: RoomData, edit: (room: RoomData) => RoomData, stamp = ROOM_SCHEMA_VERSION): RoomData {
   return { ...edit(migrateRoom(old)), version: stamp };
 }
@@ -491,21 +495,37 @@ export const roomStore = {
    *  and as a separate read and write, whichever read first and wrote last put back
    *  what the other had just changed: a rename landing across the save of **These
    *  are right** brought the rough-size note back with the stored record it had
-   *  copied. `edit` must be synchronous; it runs inside the transaction. */
+   *  copied. `edit` must be synchronous; it runs inside the transaction.
+   *
+   *  **An edit that hands back the very room it was given writes nothing** — no record,
+   *  and no `touched` stamp — and returns that room. The stamp is what orders the rooms
+   *  list, so a change that was decided against inside the transaction (a reshape the
+   *  room had stopped qualifying for) must not move the room to the top as if it had
+   *  been edited. Return a copy to force the write. */
   async editRoom(roomId: string, edit: (room: RoomData) => RoomData): Promise<RoomData | undefined> {
     let written: RoomData | undefined;
+    let unchanged = false;
     try {
       await update<RoomData>(k(roomId, 'meta'), (old) => {
         if (!old) throw NO_ROOM;
-        written = rewritten(old, edit, recordOnlyStamp(old));
+        const current = migrateRoom(old);
+        const next = edit(current);
+        if (next === current) {
+          written = current;
+          unchanged = true;
+          throw UNCHANGED;
+        }
+        written = { ...next, version: recordOnlyStamp(old) };
         return written;
       });
     } catch (e) {
       if (e === NO_ROOM) return undefined;
-      reportQuota(e);
-      throw e;
+      if (e !== UNCHANGED) {
+        reportQuota(e);
+        throw e;
+      }
     }
-    await touch(roomId);
+    if (!unchanged) await touch(roomId);
     return written;
   },
   async renameRoom(roomId: string, name: string): Promise<RoomData | undefined> {

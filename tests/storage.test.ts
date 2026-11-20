@@ -13,7 +13,7 @@
 
 import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { clear, keys, set } from 'idb-keyval';
+import { clear, get, keys, set } from 'idb-keyval';
 import { markRoughSize, roomStore, ROOM_SCHEMA_VERSION, type RoomData } from '@/lib/storage';
 import { retiredOverridesFor, type ScenePart } from '@/lib/scene-spec';
 
@@ -206,6 +206,33 @@ describe('listRooms', () => {
       // Touch 'a' last.
       await roomStore.renameRoom('a', 'Newest');
       expect((await roomStore.listRooms()).map((r) => r.id)).toEqual(['a', 'c', 'b']);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  // A reshape is decided inside the write — a room that has stopped qualifying is handed
+  // back as it was — and that refusal used to stamp the room as edited, so declining a
+  // change moved the room to the top of the list as if it had been made.
+  it('leaves the order and the record alone when an edit hands its room back', async () => {
+    let now = 1_000;
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => (now += 10));
+    try {
+      await roomStore.saveRoom(room('a'));
+      // An old record, so a write would have to restamp it.
+      await set('room:a:meta', { ...room('a'), version: 1 });
+      await roomStore.saveRoom(room('b'));
+      const before = await get('room:a:meta');
+      const touched = await get('room:a:touched');
+      const written = await roomStore.editRoom('a', (r) => r);
+      expect(written?.id).toBe('a');
+      expect((await roomStore.listRooms()).map((r) => r.id)).toEqual(['b', 'a']);
+      expect(await get('room:a:touched')).toBe(touched);
+      // Not even restamped: a version write is still a write.
+      expect(await get('room:a:meta')).toEqual(before);
+      // A copy is a change, and moves it.
+      await roomStore.editRoom('a', (r) => ({ ...r }));
+      expect((await roomStore.listRooms()).map((r) => r.id)).toEqual(['a', 'b']);
     } finally {
       clock.mockRestore();
     }
