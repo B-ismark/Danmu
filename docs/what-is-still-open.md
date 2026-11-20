@@ -11018,3 +11018,28 @@ before the scan. A photo with no wall ahead in the drawn outline is named there 
 likely sign of a wrong shape.
 
 The user decides: build the second-origin model, or leave this closed.
+
+## § 60 · TypeScript 7 — HELD 2026-11-20, waiting on typescript-eslint
+
+**Exists in a commit:** no. It was tried on a branch and reverted; the repo stays on
+TypeScript 6.0.3, the newest 6.x.
+
+What was measured, with `typescript@7.0.2` installed in place of 6.0.3:
+
+- `pnpm typecheck` passed with no errors and no code changes.
+- `pnpm build` passed, including its own TypeScript step.
+- `pnpm lint` did not start. typescript-eslint stops at load with *"typescript-eslint does
+  not support TS 7.0"*, and every `eslint-config-next/typescript` rule goes through it.
+
+Why: TypeScript 7 is the native compiler. Its package no longer exports the JavaScript
+compiler API that typescript-eslint is built on; `typescript`'s `.` entry is a version
+stub, and the API lives under `typescript/unstable/*`. typescript-eslint 8.73.0, and its
+`canary` 8.73.1-alpha.7, both declare `typescript >=4.8.4 <6.1.0`.
+
+Decided against for now: installing 7 beside 6 (6 for lint and the build, 7 for
+`tsc --noEmit`). That would mean two compilers in the gate that could disagree, for a
+faster type check and nothing a user sees.
+
+Revisit when a typescript-eslint release widens its `typescript` peer range past 7.0. Then
+re-run the same three gates. They were green except lint on 2026-11-20, so the work is
+expected to be one bump.
