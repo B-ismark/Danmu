@@ -343,26 +343,30 @@ export default function CapturePage() {
   /** Swap the room's outline for another preset, keeping the photos on their walls.
    *  Re-checked inside the write, so a room that gained a dragged wall in another tab
    *  is left as it is rather than redrawn. */
-  async function changeShape(to: PresetId) {
-    if (!roomId) return;
+  async function changeShape(to: PresetId): Promise<string | null> {
+    if (!roomId) return 'No room is open on this device.';
+    let written;
     try {
-      const written = await roomStore.editRoom(roomId, (r) => (canReshape(r, arranged) ? reshapeRoom(r, to) : r));
-      if (!written) return;
-      setRoom({
-        width: written.width,
-        depth: written.depth,
-        layoutId: written.layoutId,
-        footprint: written.footprint,
-        roughSize: written.roughSize === true,
-      });
-      setAnnounce(
-        written.layoutId === to
-          ? `Room shape changed to ${shapeName(to)}. Your photos are on the same walls.`
-          : 'This room has been shaped by hand, so its shape was left as it is.',
-      );
+      written = await roomStore.editRoom(roomId, (r) => (canReshape(r, arranged) ? reshapeRoom(r, to) : r));
     } catch {
-      setAnnounce(writeFailed('The new shape'));
+      const said = writeFailed('The new shape');
+      setAnnounce(said);
+      return said;
     }
+    if (!written) return 'This room is no longer on this device.';
+    setRoom({
+      width: written.width,
+      depth: written.depth,
+      layoutId: written.layoutId,
+      footprint: written.footprint,
+      roughSize: written.roughSize === true,
+    });
+    if (written.layoutId !== to) {
+      // Shaped by hand since this screen loaded (another tab dragged a wall).
+      return 'This room has been shaped by hand since, so its shape was left as it is.';
+    }
+    setAnnounce(`Room shape changed to ${shapeName(to)}. Your photos are on the same walls.`);
+    return null;
   }
 
   async function movePhoto(from: CaptureSlot, to: CaptureSlot) {

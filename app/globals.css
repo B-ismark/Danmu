@@ -2647,6 +2647,8 @@ textarea.field { border-radius: var(--r-2); }
 /* The check before the scan: the plan with each photo pinned to its wall. */
 .shape-check__plan { display: block; inline-size: 100%; block-size: auto; max-block-size: 320px; background: var(--paper-2); border-radius: var(--r-2); }
 .shape-check__change { display: flex; margin-top: 12px; }
+.shape-check__failed { margin: 10px 0 0; color: var(--danger-text); }
+.shape-check__failed:empty { display: none; }
 .capture-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: capture-step; }
 .capture-steps > li {
   display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start;

@@ -64,7 +64,7 @@ describe('the shape on the photos screen', () => {
     await mounted();
     fireEvent.click(screen.getByRole('button', { name: 'Change' }));
     const dialog = await screen.findByRole('dialog');
-    fireEvent.click(within(dialog).getByRole('radio', { name: 'L-Shape' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'L-Shape' }));
     await waitFor(async () => expect((await roomStore.loadRoom(ROOM_ID))?.layoutId).toBe('l'));
     const saved = (await roomStore.loadRoom(ROOM_ID))!;
     // A typical-size room takes the new shape's typical size, and its starter name.
@@ -93,7 +93,7 @@ describe('the shape on the photos screen', () => {
     fireEvent.click(continueButton());
     const dialog = await screen.findByRole('dialog');
     fireEvent.click(within(dialog).getByRole('button', { name: /Change the shape/ }));
-    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('radio', { name: 'U-Shape' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'U-Shape' }));
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Does this look like your room?' })).toBeTruthy());
     expect(screen.getByRole('dialog').textContent).toMatch(/drawn as U-Shape/);
     // From the middle of a U, Wall 1 has no wall straight ahead: said, by name, as
@@ -101,6 +101,25 @@ describe('the shape on the photos screen', () => {
     expect(screen.getByRole('dialog').textContent).toMatch(/Wall 1: from the middle of this outline there is no wall straight ahead/);
     expect(screen.getByRole('dialog').querySelectorAll('.shape-check__plan image')).toHaveLength(1);
     expect((await roomStore.loadRoom(ROOM_ID))?.layoutId).toBe('u');
+  });
+
+  it('says so, and stays on the shapes, when the new shape cannot be saved', async () => {
+    await mounted();
+    const spy = vi.spyOn(roomStore, 'editRoom').mockRejectedValueOnce(new Error('quota'));
+    try {
+      fireEvent.click(continueButton());
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Change the shape/ }));
+      const dialog = await screen.findByRole('dialog');
+      // The current shape is marked as current, not as a checked radio.
+      expect(within(dialog).getByRole('button', { name: 'Rectangle' }).getAttribute('aria-current')).toBe('true');
+      fireEvent.click(within(dialog).getByRole('button', { name: 'T-Shape' }));
+      await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toMatch(/could not be saved/));
+      // Still on the shapes, and the room is still a rectangle.
+      expect(screen.queryByRole('heading', { name: 'Does this look like your room?' })).toBeNull();
+      expect((await roomStore.loadRoom(ROOM_ID))?.layoutId).toBe('rect');
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('shows but does not offer the shape once furniture is arranged for it', async () => {

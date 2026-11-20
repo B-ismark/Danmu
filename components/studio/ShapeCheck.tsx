@@ -70,11 +70,14 @@ export function ShapeCheckDialog({
   /** Why the shape cannot be changed here, said in its place. */
   why?: string;
   onConfirm: () => void;
-  onChangeShape: (to: PresetId) => Promise<void> | void;
+  /** Writes the new shape. Resolves null when it landed, or the sentence to show
+   *  when it did not — the dialog stays on the shapes and says so. */
+  onChangeShape: (to: PresetId) => Promise<string | null>;
   onClose: () => void;
 }) {
   const [mode, setMode] = useState<Mode>(initial);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const name = shapeName(layoutId);
   // A photo on a wall that, from the middle of this outline, is not straight ahead —
   // the U's first view — cannot be measured. Said here by name, because it is also
@@ -90,10 +93,19 @@ export function ShapeCheckDialog({
       return;
     }
     setBusy(true);
+    setFailed(null);
+    let problem: string | null;
     try {
-      await onChangeShape(to);
+      problem = await onChangeShape(to);
     } finally {
       setBusy(false);
+    }
+    // A write that did not land is said here, where the person is looking, and the
+    // shapes stay up. Going back to the check would show the OLD outline under a
+    // press that looked like it worked.
+    if (problem) {
+      setFailed(problem);
+      return;
     }
     // From the check, back to the check with the new outline drawn; from Change, done.
     if (initial === 'confirm') setMode('confirm');
@@ -116,15 +128,17 @@ export function ShapeCheckDialog({
           Most bedrooms are plain rectangles. Pick an L, T or U only if a corner sticks into the room or a nook juts
           out of it. Your photos stay where they are.
         </p>
-        <div role="radiogroup" aria-label="Room shape" className="shape-options shape-options--compact">
+        {/* Buttons, not a radio group: a press here APPLIES the shape (it is written
+            straight away), where a radio group promises arrow keys that only move a
+            choice. The current shape says so with aria-current. */}
+        <div role="group" aria-label="Room shape" className="shape-options shape-options--compact">
           {ROOM_PRESETS.map((p) => {
             const active = p.id === layoutId;
             return (
               <button
                 key={p.id}
                 type="button"
-                role="radio"
-                aria-checked={active}
+                aria-current={active || undefined}
                 disabled={busy}
                 className="shape-option"
                 data-active={active || undefined}
@@ -146,6 +160,7 @@ export function ShapeCheckDialog({
             );
           })}
         </div>
+        <p role="alert" className="t-small shape-check__failed">{failed}</p>
       </Modal>
     );
   }
