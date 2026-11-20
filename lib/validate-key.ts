@@ -3,7 +3,7 @@
 // Lightweight Gemini key check — one tiny flash call. Used by Settings only.
 // Lives standalone so Settings doesn't pull in any feature lib.
 
-import { GoogleGenAI } from '@google/genai';
+import { geminiClient } from './gemini-client';
 
 /** Why a code and not the exception text: every failure used to collapse into
  *  "invalid", so a good key on a flaky connection told the user to replace it —
@@ -34,7 +34,7 @@ function classify(e: unknown): KeyFailure {
 export async function validateKey(apiKey: string): Promise<KeyResult> {
   if (!apiKey) return { ok: false, reason: 'empty' };
   try {
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = geminiClient(apiKey);
     await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: 'ping' });
     return { ok: true };
   } catch (e) {

@@ -579,7 +579,10 @@ Furniture detection runs through a fallback chain, best-effort:
 2. **Gemini fallback and second look** — `lib/detection.ts`: one multimodal `@google/genai` call
    over all wall photos at once (so it can reason about object continuity across
    walls). BYO key, and nothing here counts calls against it: Google's own limit
-   error is what the user sees (`classifyDetect`). Key validated by
+   error is what the user sees (`classifyDetect`). Both this call and the key check
+   build their client through `lib/gemini-client.ts`, which pins the API version to
+   `v1beta` — SDK 3 moved its default to `v1`, and an SDK bump must not quietly
+   change what is sent with the user's key. Key validated by
    `lib/validate-key.ts`. It runs when the on-device pass finds nothing, **and as a
    second look whenever a key is set**: both lists go through `refineDetections`, so
    a piece both passes saw merges to one row (same photo by box overlap; across
