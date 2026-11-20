@@ -1,6 +1,6 @@
 'use client';
 
-import { GoogleGenAI } from '@google/genai';
+import { geminiClient } from './gemini-client';
 import { cloudRequest, type PromptRoom } from './detect-prompt';
 import type { DetectSource } from './detect-confidence';
 import type { CaptureSlot } from './storage';
@@ -108,7 +108,7 @@ export async function detectAcrossImages(
   if (!apiKey) throw new DetectError('NO_KEY', 'Add your Google API key in Settings.');
   if (images.length === 0) return { rows: [], dropped: 0 };
 
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = geminiClient(apiKey);
   // One list for both ends: the walls the prompt says were photographed are the
   // walls the reply is held to (§ 49.17).
   const request = cloudRequest(room, images.map((i) => i.slot));
