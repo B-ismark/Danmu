@@ -4167,8 +4167,9 @@ reports a `next.config.mjs` key it does not recognise as a warning and builds an
 a setting that silently stopped meaning anything. (Up to Next 15 the same grep caught
 `next build`'s own ESLint pass linting nothing while exiting 0; Next 16 removed that
 pass, so `pnpm lint` is the only lint gate.) `tests/toolchain.test.ts` pins what the
-lint config itself must keep: ESLint >= 9, `next/typescript` extended, the config not
-ignoring itself, and the classic React hook rules on while the React Compiler's are
+lint config itself must keep: ESLint >= 9, `next/typescript` extended, every bundled
+plugin family (React, hooks, jsx-a11y, import, Next) still reporting a defect end to
+end, the config not ignoring itself, and the classic React hook rules on while the React Compiler's are
 deliberately off.
 
 Next's build cache (`.next/cache`) is carried between runs, keyed on the lockfile

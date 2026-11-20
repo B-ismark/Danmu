@@ -939,7 +939,11 @@ the boundary honest in both directions: a module only tests import does not belo
   old `eslint: { dirs }` key would have sat there meaning nothing.
   What is load-bearing in `eslint.config.mjs` now:
   - **ESLint must stay `>= 9`.** Flat config is the only format here and
-    `eslint-config-next` 16 needs it.
+    `eslint-config-next` 16 needs it. It is on 10, where the React, jsx-a11y and
+    import plugins Next bundles run **outside their declared peer range** (they stop
+    at `^9`). The install warns and nothing fails, which is exactly the danger: a
+    plugin that breaks on a new ESLint goes quiet rather than red. So each family is
+    held by a probe it must REPORT a defect on, not by its presence in the config.
   - **`next/typescript` is extended, not just `next/core-web-vitals`.** Without it
     `@typescript-eslint/no-unused-vars` is never enabled, `eslint:recommended` is not
     in the chain, and `tsconfig.json` sets no `noUnusedLocals` — so `pnpm lint` and
