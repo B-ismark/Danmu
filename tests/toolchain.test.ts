@@ -21,7 +21,7 @@
 import { describe, expect, it } from 'vitest';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { loadESLint } from 'eslint';
+import { ESLint } from 'eslint';
 import semver from 'semver';
 
 const ROOT = join(__dirname, '..');
@@ -47,7 +47,7 @@ let eslintP: Promise<{
 
 /** The flat config, resolved the way Next resolves it. */
 async function resolveFor(file: string) {
-  eslintP ??= loadESLint({ useFlatConfig: true }).then((ESLint) => new ESLint({ cwd: ROOT }));
+  eslintP ??= Promise.resolve(new ESLint({ cwd: ROOT })); // ESLint 10 is flat-config only
   const eslint = await eslintP;
   return (await eslint.calculateConfigForFile(join(ROOT, file))) as
     | { plugins?: unknown; rules?: Record<string, unknown> }
@@ -57,7 +57,7 @@ async function resolveFor(file: string) {
 /** Lint a snippet through the real config, as a file that is not on disk. Asking
  *  what the gate REPORTS, rather than what its config says it should. */
 async function lintProbe(file: string, text: string) {
-  eslintP ??= loadESLint({ useFlatConfig: true }).then((ESLint) => new ESLint({ cwd: ROOT }));
+  eslintP ??= Promise.resolve(new ESLint({ cwd: ROOT })); // ESLint 10 is flat-config only
   const eslint = await eslintP;
   const [res] = await eslint.lintText(text, { filePath: join(ROOT, file) });
   return res.messages.map((m: LintMessage) => m.ruleId);
@@ -152,6 +152,45 @@ export const x = 1;
       rules,
       'linting a dead import produced no no-unused-vars error — is next/typescript still extended?',
     ).toContain('@typescript-eslint/no-unused-vars');
+  }, RESOLVE_TIMEOUT);
+
+  it('still FIRES every bundled plugin family, end to end', async () => {
+    // eslint-config-next bundles eslint-plugin-react, -jsx-a11y and -import, and as of
+    // ESLint 10 none of the three declares support for it (their peer ranges stop at
+    // ^9). A plugin running outside its declared range does not fail loudly: a rule
+    // that calls a removed context API can throw, or one that leans on a changed
+    // default can simply never match — and either way `pnpm lint` exits 0 having
+    // checked less. So each family is held by a defect it must REPORT, not by its
+    // presence in the resolved config (a registered rule that never matches is still
+    // registered). Measured before this test was written: ESLint 9.39 and 10.15 load
+    // the same 83 rules on `PlanView.tsx` and report the same seven on this probe.
+    const rules = await lintProbe(
+      'components/__plugin-family-probe.tsx',
+      `import { useEffect, useState } from 'react';
+export function P({ items, on }: { items: string[]; on: boolean }) {
+  if (on) { useState(1); }
+  const [v] = useState(0);
+  useEffect(() => { console.log(v, items); }, []);
+  return (<div>
+    <img src="a.png" />
+    {items.map((i) => <span>{i}</span>)}
+    <div dangerouslySetInnerHTML={{ __html: 'x' }}>child</div>
+  </div>);
+}
+export default () => null;
+`,
+    );
+    for (const id of [
+      'react/jsx-key',
+      'react/no-danger-with-children',
+      'react-hooks/rules-of-hooks',
+      'react-hooks/exhaustive-deps',
+      'jsx-a11y/alt-text',
+      'import/no-anonymous-default-export',
+      '@next/next/no-img-element',
+    ]) {
+      expect(rules, `${id} went quiet — is its plugin still working on this ESLint?`).toContain(id);
+    }
   }, RESOLVE_TIMEOUT);
 
   it('turns no-img-element off for the generated-image routes, and only those', async () => {
