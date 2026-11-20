@@ -860,7 +860,7 @@ the file as "four times".
   to 90). The constant's band could be narrowed only *because* the workload is now
   pinned: it describes a fixed program, which makes it a decision rather than a
   re-measurement of something that can move.
-- The factor is measured once per **test file**, not per worker process: vitest 4 defaults
+- The factor is measured once per **test file**, not per worker process: vitest 4 and 5 default
   to `pool: 'forks'` with `isolate: true`. So the figure `perf-calibration` prints is that
   file's, and the two bars each take their own.
 

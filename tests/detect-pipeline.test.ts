@@ -191,7 +191,7 @@ describe('detection pipeline over a known room', () => {
   // Printed unconditionally, because "the harness reports a number" is the point and
   // a number only visible on failure is not reported.
   //
-  // That takes a flag. vitest 4's default reporter DISCARDS console output from a
+  // That takes a flag. vitest 4 and 5's default reporter DISCARDS console output from a
   // passing run, so for a while this printed to nobody and the gate stayed green
   // over an invisible baseline. `pnpm test` passes `--disableConsoleIntercept`, and
   // `tests/toolchain.test.ts` pins it — running vitest directly without it is why

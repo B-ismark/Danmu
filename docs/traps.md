@@ -410,7 +410,7 @@ one is not a pass.** `purgeTrash` used `ts < cutoff`, so a docs-only PR reported
 breaking persistence.
 
 **Symptom: a suite that measures something prints nothing.**
-vitest 4 discards `console.log` from a passing run.
+vitest 4 and 5 discard `console.log` from a passing run.
 → `--disableConsoleIntercept` is already on `pnpm test` and is load-bearing.
 
 ---

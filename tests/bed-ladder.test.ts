@@ -10,7 +10,7 @@
 //
 // The precedent is `detect-pipeline.test.ts`, which exists to report a measurement
 // on every run rather than to pass. That is also why `pnpm test` carries
-// `--disableConsoleIntercept`: vitest 4 discards `console.log` from a passing run,
+// `--disableConsoleIntercept`: vitest 4 and 5 discard `console.log` from a passing run,
 // and a table printed to nobody is not a measurement.
 import { describe, it, expect } from 'vitest';
 import { defaultScene, PART_LIBRARY, BED_LADDER } from '../lib/scene-spec';
