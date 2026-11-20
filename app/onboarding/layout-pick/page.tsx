@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDimUnit, useRoom, useSettings, type DimUnit } from '@/lib/store';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -54,10 +54,13 @@ import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf, type PresetId } f
  *  three. Figures a person reads belong to the interface's type scale, not the
  *  plan's. Null until measured: the labels wait one frame rather than guess a size,
  *  and the SVG's own `aria-label` carries the same numbers in the meantime. */
-function useScreenScale(ref: RefObject<SVGSVGElement | null>): ScreenScale | null {
+function useScreenScale(el: SVGSVGElement | null): ScreenScale | null {
   const [scale, setScale] = useState<ScreenScale | null>(null);
+  // Keyed on the ELEMENT, not a ref object: the drawing unmounts while the photo route
+  // asks for a shape and a new one mounts on the pick, and an observer bound once to
+  // the first node went on measuring a node that was gone — the labels kept their
+  // first-paint size through every resize and rotation after.
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const read = () => {
       const r = el.getBoundingClientRect();
@@ -71,7 +74,7 @@ function useScreenScale(ref: RefObject<SVGSVGElement | null>): ScreenScale | nul
     const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref]);
+  }, [el]);
   return scale;
 }
 
@@ -93,7 +96,10 @@ export default function LayoutPickPage() {
   // same two ways on, with the photo one leading. Read from the address after
   // mount rather than through `useSearchParams`, which would make the whole page
   // wait on a Suspense boundary for one boolean.
-  const [photoFirst, setPhotoFirst] = useState(false);
+  // Null until read: which route this is is unknown for the server render and the
+  // first paint, and that frame must not show (or let a press create) the Rectangle
+  // the photo route exists to stop defaulting to. Unknown asks, like the photo route.
+  const [photoFirst, setPhotoFirst] = useState<boolean | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is only readable in the browser; the server render cannot know it
     setPhotoFirst(new URLSearchParams(window.location.search).get('then') === 'photos');
@@ -104,7 +110,7 @@ export default function LayoutPickPage() {
   // the outline off the photos (CLAUDE.md rule 2), so every wall was measured from the
   // wrong one. A room made for decorating can start as a rectangle: dragging its walls
   // costs nothing. A room made for MEASURING is only as right as this answer.
-  const sel: PresetId | null = picked ?? (photoFirst ? null : 'rect');
+  const sel: PresetId | null = picked ?? (photoFirst === false ? 'rect' : null);
   const asking = sel === null;
   const setSel = setPicked;
   // Roving tabindex needs the DOM nodes: arrow keys move focus, not just state.
@@ -119,8 +125,8 @@ export default function LayoutPickPage() {
   const [left, setLeft] = useState<ReadonlySet<RoomAxis>>(() => new Set());
   const [tried, setTried] = useState(false);
   const sizeRef = useRef<HTMLDivElement>(null);
-  const planRef = useRef<SVGSVGElement>(null);
-  const screen = useScreenScale(planRef);
+  const [planEl, setPlanEl] = useState<SVGSVGElement | null>(null);
+  const screen = useScreenScale(planEl);
 
   // With nothing picked, the size fields and their drawing are not shown; the
   // rectangle only stands in so the arithmetic below has a shape to run on.
@@ -153,7 +159,7 @@ export default function LayoutPickPage() {
   // logic to drift. The shape is passed rather than read from `sel`, so a
   // double-click starts the shape it landed on.
   async function createRoom(dest: 'model' | 'capture', shapeId: PresetId | null = sel) {
-    if (saving || !shapeId) return;
+    if (saving || !shapeId || photoFirst === null) return;
     const shape = PRESETS.find((p) => p.id === shapeId)!;
     // Refused, not repaired: a size outside the room range is named with its range
     // and the room is not made. Saving the two good sides of a half-typed room, or
@@ -320,7 +326,7 @@ export default function LayoutPickPage() {
           ) : (
           <figure>
             <div className="pick-side__plan">
-              <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} room shape, ${wText} by ${dText}, ${layout.areaText} of floor`}>
+              <svg ref={setPlanEl} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} room shape, ${wText} by ${dText}, ${layout.areaText} of floor`}>
                 <path
                   d={layout.path}
                   fill="var(--accent-tint)"

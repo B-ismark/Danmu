@@ -304,7 +304,7 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 
 ### The room's shape is asked, shown and checked on the photo route
 - **Where:** Rooms → *Photograph your room* (nothing picked, both buttons off until a shape is). On the photos screen, *Your room: … · Change* under the title. Add photos, press Continue: *Does this look like your room?* → *Change the shape* → U-Shape. Also a room opened in the studio first, then *Resume* its photos. At 390px and 1440px.
-- **Wrong looks like:** the question reading as a test someone can fail, or the rectangle hint missed; a pinned photo covering its wall's number or another photo; the dialog's shapes running off a phone; Change offered on a room whose furniture is already laid out.
+- **Wrong looks like:** the question reading as a test someone can fail, or the rectangle hint missed; a pinned photo covering its wall's number or another photo; the dialog's shapes running off a phone; Change offered on a room whose furniture is already laid out. On the picker, the size labels on the drawing not following a window resize or phone rotation after a shape is picked; a one-frame flash of *Pick a shape to go on* on the decorating route (the cost of not flashing Rectangle on the photo route).
 - **Needs:** any browser, and a real room with an L or U shape if one is to hand.
 - **Rides:** this branch (`claude/friendly-maxwell-cep4vz`)
 

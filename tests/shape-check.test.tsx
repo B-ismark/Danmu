@@ -19,6 +19,7 @@ import CapturePage from '@/app/onboarding/capture/page';
 import { roomStore, type RoomData } from '@/lib/storage';
 import { useRoom } from '@/lib/store';
 import { PRESET_HEIGHT } from '@/lib/room-presets';
+import { footprintForLayout } from '@/lib/footprint';
 
 const ROOM_ID = 'shape-room';
 const room: RoomData = {
@@ -83,7 +84,7 @@ describe('the shape on the photos screen', () => {
     // Not yet: the check is the step, the scan is behind it.
     expect(router.push).not.toHaveBeenCalled();
     expect(dialog.querySelectorAll('.shape-check__plan image')).toHaveLength(2);
-    expect(within(dialog).getByRole('img').getAttribute('aria-label')).toMatch(/photos on Wall 1, Wall 2/);
+    expect(within(dialog).getByRole('img').getAttribute('aria-label')).toMatch(/photos on Wall 1 and Wall 2/);
     fireEvent.click(within(dialog).getByRole('button', { name: /Yes, find the furniture/ }));
     expect(router.push).toHaveBeenCalledWith('/onboarding/detect');
   });
@@ -117,6 +118,54 @@ describe('the shape on the photos screen', () => {
       // Still on the shapes, and the room is still a rectangle.
       expect(screen.queryByRole('heading', { name: 'Does this look like your room?' })).toBeNull();
       expect((await roomStore.loadRoom(ROOM_ID))?.layoutId).toBe('rect');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('still offers the shape when the studio only saved the room’s own outline back', async () => {
+    // RoomSync writes `footprint` on every shell save; the preset's own polygon is not a moved wall.
+    await roomStore.saveRoom({ ...room, footprint: footprintForLayout('rect', 6, 4).map(([x, z]) => [x, z] as [number, number]) });
+    await mounted();
+    const line = screen.getByText(/Your room:/).closest('p')!;
+    expect(within(line).getByRole('button', { name: 'Change' })).toBeTruthy();
+    expect(line.textContent).not.toMatch(/walls moved/);
+  });
+
+  it('names furniture, not moved walls, for an arranged room carrying its own outline', async () => {
+    await roomStore.saveRoom({ ...room, footprint: footprintForLayout('rect', 6, 4).map(([x, z]) => [x, z] as [number, number]) });
+    await roomStore.saveSceneParts(ROOM_ID, []);
+    await mounted();
+    const line = screen.getByText(/Your room:/).closest('p')!;
+    expect(line.textContent).toMatch(/furniture already arranged/);
+    fireEvent.click(continueButton());
+    expect((await screen.findByRole('dialog')).textContent).toMatch(/already has furniture arranged/);
+  });
+
+  it('says a scan will be looked for again, and clears it with the new shape', async () => {
+    await roomStore.saveRoom({ ...room, detectedObjects: [{ id: 0, label: 'bed', conf: 0.9, locked: true, box: [0, 0, 1, 1] }] });
+    await mounted();
+    fireEvent.click(screen.getByRole('button', { name: 'Change' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(dialog.textContent).toMatch(/will be looked for again/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'L-Shape' }));
+    await waitFor(async () => expect((await roomStore.loadRoom(ROOM_ID))?.layoutId).toBe('l'));
+    expect((await roomStore.loadRoom(ROOM_ID))?.detectedObjects).toBeUndefined();
+  });
+
+  it('waits for a shape being written before Escape can leave', async () => {
+    await mounted();
+    let land!: (v: RoomData | undefined) => void;
+    const spy = vi.spyOn(roomStore, 'editRoom').mockImplementationOnce(() => new Promise((r) => (land = r)));
+    try {
+      fireEvent.click(continueButton());
+      fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: /Change the shape/ }));
+      fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'T-Shape' }));
+      fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+      // Still on the shapes, not back on the check under the old outline.
+      expect(screen.getByRole('heading', { name: /What shape is your room/ })).toBeTruthy();
+      land(undefined);
+      await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('alert').textContent).toMatch(/no longer on this device/));
     } finally {
       spy.mockRestore();
     }

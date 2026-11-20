@@ -12,7 +12,7 @@
 //     it is the one mismatch a person can see at a glance, which is the point of drawing
 //     it rather than asking in words.
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Modal } from '@/components/ui/Modal';
 import { Icon } from '@/components/ui/Icon';
 import { ROOM_PRESETS, type PresetId } from '@/lib/room-presets';
@@ -23,6 +23,9 @@ import { CAPTURE_SLOTS } from '@/lib/capture';
 import type { CaptureSlot, LayoutId } from '@/lib/storage';
 
 const labelOf = (id: CaptureSlot) => CAPTURE_SLOTS.find((s) => s.id === id)!.label;
+/** "Wall 1", "Wall 1 and Wall 3", "Wall 1, Wall 2 and Wall 4". */
+const listOf = (items: string[]) =>
+  items.length <= 1 ? items.join('') : `${items.slice(0, -1).join(', ')} and ${items[items.length - 1]}`;
 
 export function shapeName(layoutId: LayoutId | string | undefined): string {
   return ROOM_PRESETS.find((p) => p.id === layoutId)?.name ?? 'Custom shape';
@@ -55,6 +58,7 @@ export function ShapeCheckDialog({
   footprint,
   photos,
   reshapable,
+  scanned = false,
   why,
   onConfirm,
   onChangeShape,
@@ -67,6 +71,8 @@ export function ShapeCheckDialog({
   /** Each wall's photo, as an object URL. */
   photos: Partial<Record<CaptureSlot, string>>;
   reshapable: boolean;
+  /** Furniture was already found in these photos; a new shape clears that scan. */
+  scanned?: boolean;
   /** Why the shape cannot be changed here, said in its place. */
   why?: string;
   onConfirm: () => void;
@@ -112,11 +118,18 @@ export function ShapeCheckDialog({
     else onClose();
   }
 
+  // While a shape is being written, Escape and the backdrop wait for it: leaving
+  // mid-write would hide the answer — back on the check under the OLD outline, or the
+  // dialog gone — and a failure would be said to nobody.
+  const leave = (go: () => void) => () => {
+    if (!busy) go();
+  };
+
   if (mode === 'change') {
     const fit = { w: Math.max(...ROOM_PRESETS.map((p) => p.width)), d: Math.max(...ROOM_PRESETS.map((p) => p.depth)) };
     return (
       <Modal
-        onClose={initial === 'confirm' ? () => setMode('confirm') : onClose}
+        onClose={leave(initial === 'confirm' ? () => setMode('confirm') : onClose)}
         labelledBy="shape-check-title"
         width={560}
         blur
@@ -127,6 +140,7 @@ export function ShapeCheckDialog({
         <p className="t-body" style={{ margin: '0 0 16px', lineHeight: 1.5 }}>
           Most bedrooms are plain rectangles. Pick an L, T or U only if a corner sticks into the room or a nook juts
           out of it. Your photos stay where they are.
+          {scanned && ' The furniture already found in them was measured for this outline, so it will be looked for again.'}
         </p>
         {/* Buttons, not a radio group: a press here APPLIES the shape (it is written
             straight away), where a radio group promises arrow keys that only move a
@@ -199,7 +213,7 @@ export function ShapeCheckDialog({
       <PinnedPlan footprint={footprint} photos={photos} name={name} />
       {unpinned.length > 0 && (
         <p className="t-small" style={{ margin: '10px 0 0', lineHeight: 1.5 }}>
-          {unpinned.map(labelOf).join(' and ')}: from the middle of this outline there is no wall straight
+          {listOf(unpinned.map(labelOf))}: from the middle of this outline there is no wall straight
           ahead, so {unpinned.length > 1 ? 'those photos' : 'that photo'} cannot be measured. If your photo shows a
           wall, the shape is probably different.
         </p>
@@ -221,6 +235,8 @@ export function ShapeCheckDialog({
 /** The outline with each photo pinned just inside its wall, numbered as on the
  *  photos screen. Drawn in plan metres, north up, fitted to its box. */
 function PinnedPlan({ footprint, photos, name }: { footprint: [number, number][]; photos: Partial<Record<CaptureSlot, string>>; name: string }) {
+  // Clip ids are document-global; scoped so a second plan on the page cannot borrow these.
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
   const xs = footprint.map((p) => p[0]);
   const zs = footprint.map((p) => p[1]);
   const pad = 0.4;
@@ -243,7 +259,7 @@ function PinnedPlan({ footprint, photos, name }: { footprint: [number, number][]
     const cz = mz - (mz / len) * t * 0.62;
     return [{ slot, url, seg, cx, cz }];
   });
-  const placed = pins.map((p) => labelOf(p.slot)).join(', ');
+  const placed = listOf(pins.map((p) => labelOf(p.slot)));
   return (
     <svg
       className="shape-check__plan"
@@ -253,7 +269,7 @@ function PinnedPlan({ footprint, photos, name }: { footprint: [number, number][]
     >
       <defs>
         {pins.map((p) => (
-          <clipPath key={p.slot} id={`pin-${p.slot}`}>
+          <clipPath key={p.slot} id={`pin-${uid}-${p.slot}`}>
             <rect x={p.cx - t / 2} y={p.cz - t / 2} width={t} height={t} rx={t * 0.12} />
           </clipPath>
         ))}
@@ -285,7 +301,7 @@ function PinnedPlan({ footprint, photos, name }: { footprint: [number, number][]
             width={t}
             height={t}
             preserveAspectRatio="xMidYMid slice"
-            clipPath={`url(#pin-${p.slot})`}
+            clipPath={`url(#pin-${uid}-${p.slot})`}
           />
           <rect
             x={p.cx - t / 2}

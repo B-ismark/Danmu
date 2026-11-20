@@ -41,7 +41,7 @@ import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
 import { FinderPrep } from '@/components/studio/FinderPrep';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { framedWall } from '@/lib/capture-plan';
-import { canReshape, reshapeRoom } from '@/lib/room-reshape';
+import { canReshape, isPresetOutline, reshapeRoom } from '@/lib/room-reshape';
 import { shapeName, ShapeCheckDialog, ShapeLine } from '@/components/studio/ShapeCheck';
 import type { PresetId } from '@/lib/room-presets';
 import type { CaptureSlot, CapturePose, LayoutId } from '@/lib/storage';
@@ -109,6 +109,9 @@ export default function CapturePage() {
     /** The size is the shape's typical one (`RoomData.roughSize`), so the wall
      *  lengths beside the photos are too, and say so. */
     roughSize: boolean;
+    /** Furniture has been found in these photos (`detectedObjects`). A new shape
+     *  clears it — it was measured from the old walls — and the dialog says so. */
+    scanned: boolean;
   } | null>(null);
   /** The room already has furniture laid out (a saved scene or moves), so its outline
    *  is someone's work and the shape is shown here, not offered (`canReshape`). */
@@ -196,6 +199,7 @@ export default function CapturePage() {
           layoutId: meta.layoutId,
           footprint: meta.footprint,
           roughSize: meta.roughSize === true,
+          scanned: (meta.detectedObjects?.length ?? 0) > 0,
         });
       for (const c of caps) {
         // `patchIfSame`, not a write by slot: scoring is async and the user can
@@ -349,7 +353,7 @@ export default function CapturePage() {
     try {
       written = await roomStore.editRoom(roomId, (r) => (canReshape(r, arranged) ? reshapeRoom(r, to) : r));
     } catch {
-      const said = writeFailed('The new shape');
+      const said = 'The new shape could not be saved, so your room is still drawn as before. Try again.';
       setAnnounce(said);
       return said;
     }
@@ -360,6 +364,7 @@ export default function CapturePage() {
       layoutId: written.layoutId,
       footprint: written.footprint,
       roughSize: written.roughSize === true,
+      scanned: (written.detectedObjects?.length ?? 0) > 0,
     });
     if (written.layoutId !== to) {
       // Shaped by hand since this screen loaded (another tab dragged a wall).
@@ -483,7 +488,7 @@ export default function CapturePage() {
   const nextSpan = nextSlot ? spanLabel(nextSlot) : null;
   const reshapable = !!room && canReshape(room, arranged);
   // Said where Change would be, so a shape that cannot change here is not a mystery.
-  const reshapeWhy = !room || reshapable ? undefined : room.footprint?.length ? 'walls moved in the studio' : arranged ? 'furniture already arranged' : undefined;
+  const reshapeWhy = !room || reshapable ? undefined : !isPresetOutline(room) ? 'walls moved in the studio' : arranged ? 'furniture already arranged' : undefined;
   // The how-to, the room's plan with the next wall lit, and the phone height: what
   // a person reads before the first shot, kept beside the photos rather than in a
   // line over them.
@@ -720,9 +725,10 @@ export default function CapturePage() {
           footprint={roomFootprint(room)}
           photos={Object.fromEntries(filledSlots.map((s) => [s, photos[s]!.url]))}
           reshapable={reshapable}
+          scanned={room.scanned}
           why={
             reshapeWhy &&
-            (room.footprint?.length
+            (!isPresetOutline(room)
               ? "This room's walls were moved in the studio, so its shape stays as it is."
               : 'This room already has furniture arranged for this outline, so its shape stays as it is.')
           }
