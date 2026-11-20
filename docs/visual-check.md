@@ -45,13 +45,13 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Where:** Photos → add four wall photos where one is shot close up from the foot of the bed, tilted down → Furniture → that wall's tab. Then narrow the window to phone width.
 - **Wrong looks like:** no amber note above that photo; rows there still say "does not fit a bed"; the note or its Retake button squeezed or clipped at phone width; the note on a photo where most pieces did fit.
 - **Needs:** any browser and a real off-centre photo (seen headless on a stock hotel photo only).
-- **Rides:** this branch, before its PR merges
+- **Rides:** `ce2cd55` (B-ismark/Danmu#326)
 
 ### A nightstand behind the bed reads its real size
 - **Where:** Photos → a wall photo taken from the foot of a bed, with a nightstand beside the headboard whose legs the mattress hides → Furniture → that wall's tab, then the 3D model. Then, on the same tab: delete the bed, undo; draw a box by hand around the nightstand from the mattress up; rename the nightstand and look at what it offers; leave the screen and come back.
 - **Wrong looks like:** that nightstand's row says it does not fit a nightstand, or it stands out in the middle of the bed in 3D; or a nightstand standing clear of the bed, legs in view, moving back to the wall when it was further out; a table lamp on the nightstand pushed back to the wall; the nightstand's size or chip changing when you leave and come back, or not changing when the bed is deleted; a hand-drawn nightstand reading wide and short.
 - **Needs:** any browser and a real bedroom photo (checked headless on the seaview suite's ultrawide east wall only).
-- **Rides:** this branch, before its PR merges
+- **Rides:** `ea87faf` (B-ismark/Danmu#327)
 
 ## Surfaces and textures
 
@@ -306,7 +306,7 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Where:** Rooms → *Photograph your room* (nothing picked, both buttons off until a shape is). On the photos screen, *Your room: … · Change* under the title. Add photos, press Continue: *Does this look like your room?* → *Change the shape* → U-Shape. Also a room opened in the studio first, then *Resume* its photos. At 390px and 1440px.
 - **Wrong looks like:** the question reading as a test someone can fail, or the rectangle hint missed; a pinned photo covering its wall's number or another photo; the dialog's shapes running off a phone; Change offered on a room whose furniture is already laid out. On the picker, the size labels on the drawing not following a window resize or phone rotation after a shape is picked; a one-frame flash of *Pick a shape to go on* on the decorating route (the cost of not flashing Rectangle on the photo route).
 - **Needs:** any browser, and a real room with an L or U shape if one is to hand.
-- **Rides:** this branch (`claude/friendly-maxwell-cep4vz`)
+- **Rides:** `7bcafbf` (B-ismark/Danmu#333)
 
 ### Paper colour and the room size hints
 - **Where:** light mode on a real display, with pale wall colours in 3D. Resize a rug past the room in the Inspector. Drag a room's width down to its largest piece.
