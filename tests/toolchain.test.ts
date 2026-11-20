@@ -14,7 +14,7 @@
 // there doing nothing.
 //
 // A third invariant of the same shape lives at the bottom of this file, about the
-// `test` script rather than the lint one: vitest 4's default reporter DISCARDS
+// `test` script rather than the lint one: vitest 4 and 5's default reporter DISCARDS
 // `console.log` from a passing run, so a test file that reports a measurement
 // reports it to nobody.
 
@@ -218,7 +218,7 @@ export default () => null;
 
 // The `test` script's own flag, which is load-bearing and invisible when missing.
 //
-// vitest 4's default reporter swallows `console.log` from a run where nothing
+// vitest 4 and 5's default reporter swallows `console.log` from a run where nothing
 // fails — verified by probe: a log at module scope, in a `describe` body and inside
 // an `it` all three vanish. `tests/detect-pipeline.test.ts` exists to REPORT a
 // measurement (ten pieces of furniture, their position and width error against

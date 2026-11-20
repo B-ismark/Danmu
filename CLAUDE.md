@@ -794,7 +794,7 @@ reader is an assertion is caught by that test, which is the good outcome; the ba
 one is deleting the test as well to make the sweep look right.
 
 The `--disableConsoleIntercept` on `pnpm test` is load-bearing, not tidy-up.
-vitest 4's default reporter **discards `console.log` from a passing run** — at module
+vitest 4 and 5's default reporter **discards `console.log` from a passing run** — at module
 scope, in a `describe` body and inside an `it` alike — and
 `tests/detect-pipeline.test.ts` exists to *report* a measurement: ten pieces of
 furniture, their position and width error against analytic ground truth, printed on
@@ -808,7 +808,7 @@ shape this repo keeps finding: not a broken check, an invisible one.
 instance of a class, and the class is worth naming: the dangerous failure is not a
 broken gate, it is a gate that ran, produced the right answer, and reported it to
 nobody — or into output that got skimmed. Four here, none of which failed anything.
-vitest 4 discarding the `detect-pipeline` measurement table from a passing run.
+vitest 4 and 5 discarding the `detect-pipeline` measurement table from a passing run.
 `next build` printing `ESLint: Invalid Options` on ESLint 8.57 and **exiting 0**
 having linted nothing. A `git merge-tree` simulation printing conflict stages 2 and
 3 with **no stage 1** — which is what add/add means — read as a silent revert,
