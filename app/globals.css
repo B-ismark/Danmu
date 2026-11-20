@@ -1,6 +1,9 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind is here for Preflight, its reset, and nothing else: no theme, no utilities.
+   Imported first and unlayered, which is where v3's `@tailwind base` put it, so every
+   rule below still wins by the same cascade it did before. Tailwind 3 also emitted
+   ~35 stray utilities (.hidden, .border, .transition, …) for words it found in the
+   source; the only one any element wore was .sr-only, which is defined below. */
+@import 'tailwindcss/preflight.css';
 
 /* Danmu — design tokens. "Moss Ink": warm, rounded, editorial-casual (matches
    the soft 3D models). Linen paper, an olive near-black for type, a moss green
@@ -596,6 +599,12 @@ html, body {
    wherever something actually sits on it (the phone toolbar, a sheet's body). */
 body { padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) 0 env(safe-area-inset-left, 0px); }
 * { box-sizing: border-box; }
+/* Placeholder hint text is the house hint colour everywhere, so a field without its
+   own rule (the Settings key field) does not fall through to Preflight's: v3's was a
+   fixed #9ca3af outside the palette, ~2.5:1 on paper and the same in night mode;
+   v4's is the text colour at half strength. `.field`, `.ds-input` and `.room-filter`
+   already say this and still win on specificity. */
+::placeholder { color: var(--ink-3); opacity: 1; }
 
 /* Headings lean on the display serif by default — warm + editorial. */
 h1, h2, h3, .display {
