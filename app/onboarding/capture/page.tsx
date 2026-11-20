@@ -41,7 +41,10 @@ import { FlowBarLead, Pill, Segmented } from '@/components/ui/primitives';
 import { FinderPrep } from '@/components/studio/FinderPrep';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { framedWall } from '@/lib/capture-plan';
-import type { CaptureSlot, CapturePose } from '@/lib/storage';
+import { canReshape, isPresetOutline, reshapeRoom } from '@/lib/room-reshape';
+import { shapeName, ShapeCheckDialog, ShapeLine } from '@/components/studio/ShapeCheck';
+import type { PresetId } from '@/lib/room-presets';
+import type { CaptureSlot, CapturePose, LayoutId } from '@/lib/storage';
 
 type Source = 'upload' | 'camera';
 
@@ -101,12 +104,20 @@ export default function CapturePage() {
   const [room, setRoom] = useState<{
     width: number;
     depth: number;
-    layoutId: string | undefined;
+    layoutId: LayoutId | undefined;
     footprint?: Array<[number, number]>;
     /** The size is the shape's typical one (`RoomData.roughSize`), so the wall
      *  lengths beside the photos are too, and say so. */
     roughSize: boolean;
+    /** Furniture has been found in these photos (`detectedObjects`). A new shape
+     *  clears it — it was measured from the old walls — and the dialog says so. */
+    scanned: boolean;
   } | null>(null);
+  /** The room already has furniture laid out (a saved scene or moves), so its outline
+   *  is someone's work and the shape is shown here, not offered (`canReshape`). */
+  const [arranged, setArranged] = useState(false);
+  /** The shape check: 'confirm' from Continue, 'change' from the shape line's Change. */
+  const [shapeCheck, setShapeCheck] = useState<null | 'confirm' | 'change'>(null);
   const [draggingFrom, setDraggingFrom] = useState<CaptureSlot | null>(null);
   // What the plan lights, as THREE facts rather than one slot, because one slot cannot
   // say "this is the card's wall" and "this is the wall the list is pointing at" at
@@ -154,7 +165,12 @@ export default function CapturePage() {
     if (!roomId) return;
     let stale = false;
     (async () => {
-      const [caps, meta] = await Promise.all([roomStore.loadCaptures(roomId), roomStore.loadRoom(roomId)]);
+      const [caps, meta, scene, moves] = await Promise.all([
+        roomStore.loadCaptures(roomId),
+        roomStore.loadRoom(roomId),
+        roomStore.loadSceneParts<unknown>(roomId),
+        roomStore.loadTransforms(roomId),
+      ]);
       if (stale) return;
       Object.values(photosRef.current).forEach((p) => p && URL.revokeObjectURL(p.url));
       const next = emptyPhotos();
@@ -162,6 +178,7 @@ export default function CapturePage() {
         next[c.slot] = { blob: c.blob, url: blobToObjectUrl(c.blob), quality: null, pose: c.pose };
       }
       setPhotos(next);
+      setArranged(scene !== undefined || moves !== undefined);
       // The wall-length label is the only check a person can make against their own
       // photograph, so it has to describe the room they are standing in.
       //
@@ -182,6 +199,7 @@ export default function CapturePage() {
           layoutId: meta.layoutId,
           footprint: meta.footprint,
           roughSize: meta.roughSize === true,
+          scanned: (meta.detectedObjects?.length ?? 0) > 0,
         });
       for (const c of caps) {
         // `patchIfSame`, not a write by slot: scoring is async and the user can
@@ -326,6 +344,36 @@ export default function CapturePage() {
     setAnnounce(`${labelOf(slot)} photo removed.`);
   }
 
+  /** Swap the room's outline for another preset, keeping the photos on their walls.
+   *  Re-checked inside the write, so a room that gained a dragged wall in another tab
+   *  is left as it is rather than redrawn. */
+  async function changeShape(to: PresetId): Promise<string | null> {
+    if (!roomId) return 'No room is open on this device.';
+    let written;
+    try {
+      written = await roomStore.editRoom(roomId, (r) => (canReshape(r, arranged) ? reshapeRoom(r, to) : r));
+    } catch {
+      const said = 'The new shape could not be saved, so your room is still drawn as before. Try again.';
+      setAnnounce(said);
+      return said;
+    }
+    if (!written) return 'This room is no longer on this device.';
+    setRoom({
+      width: written.width,
+      depth: written.depth,
+      layoutId: written.layoutId,
+      footprint: written.footprint,
+      roughSize: written.roughSize === true,
+      scanned: (written.detectedObjects?.length ?? 0) > 0,
+    });
+    if (written.layoutId !== to) {
+      // Shaped by hand since this screen loaded (another tab dragged a wall).
+      return 'This room has been shaped by hand since, so its shape was left as it is.';
+    }
+    setAnnounce(`Room shape changed to ${shapeName(to)}. Your photos are on the same walls.`);
+    return null;
+  }
+
   async function movePhoto(from: CaptureSlot, to: CaptureSlot) {
     if (!roomId || from === to) return;
     const moving = photosRef.current[from];
@@ -428,7 +476,9 @@ export default function CapturePage() {
       className="ds-btn ds-btn--accent"
       style={full ? { height: 48, width: '100%', justifyContent: 'center', fontSize: 'var(--fs-body)' } : { height: 34, fontSize: 'var(--fs-small)' }}
       disabled={!anyCaptured}
-      onClick={() => router.push('/onboarding/detect')}
+      // Not straight to the scan: the check first, the last moment a wrong outline
+      // is free to fix (`ShapeCheckDialog`).
+      onClick={() => (room ? setShapeCheck('confirm') : router.push('/onboarding/detect'))}
     >
       {forwardLabel}
       <Icon name="arrow-right" size={13} color="var(--on-accent)" />
@@ -436,6 +486,9 @@ export default function CapturePage() {
   );
 
   const nextSpan = nextSlot ? spanLabel(nextSlot) : null;
+  const reshapable = !!room && canReshape(room, arranged);
+  // Said where Change would be, so a shape that cannot change here is not a mystery.
+  const reshapeWhy = !room || reshapable ? undefined : !isPresetOutline(room) ? 'walls moved in the studio' : arranged ? 'furniture already arranged' : undefined;
   // The how-to, the room's plan with the next wall lit, and the phone height: what
   // a person reads before the first shot, kept beside the photos rather than in a
   // line over them.
@@ -448,6 +501,7 @@ export default function CapturePage() {
     <div className="capture-head">
       <h1 className="capture-guide__title">Photograph your room</h1>
       <p className="capture-guide__lede">One photo of each wall, taken from the middle of the room.</p>
+      {room && <ShapeLine layoutId={room.layoutId} onChange={reshapable ? () => setShapeCheck('change') : undefined} why={reshapeWhy} />}
       <FinderPrep />
     </div>
   );
@@ -663,6 +717,26 @@ export default function CapturePage() {
       <p className="sr-only" role="status" aria-live="polite">
         {announce}
       </p>
+
+      {shapeCheck && room && (
+        <ShapeCheckDialog
+          initial={shapeCheck}
+          layoutId={room.layoutId}
+          footprint={roomFootprint(room)}
+          photos={Object.fromEntries(filledSlots.map((s) => [s, photos[s]!.url]))}
+          reshapable={reshapable}
+          scanned={room.scanned}
+          why={
+            reshapeWhy &&
+            (!isPresetOutline(room)
+              ? "This room's walls were moved in the studio, so its shape stays as it is."
+              : 'This room already has furniture arranged for this outline, so its shape stays as it is.')
+          }
+          onConfirm={() => router.push('/onboarding/detect')}
+          onChangeShape={changeShape}
+          onClose={() => setShapeCheck(null)}
+        />
+      )}
     </div>
   );
 }

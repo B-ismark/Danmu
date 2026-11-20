@@ -239,6 +239,35 @@ Two ways in:
    shown only on this route and its steps are marked done, never linked: the shape page
    MAKES a room, so a link back to it would start a second one.
 
+**On the photo route the shape is asked, never defaulted, and checked before the scan**
+(`lib/room-reshape.ts`, `components/studio/ShapeCheck.tsx`). Nothing reads a room's outline
+off its photos (rule 2; a square-on wall shot is the degenerate case), so the outline is the
+person's answer, and it is the most expensive one they give: every size taken off a photo is
+measured from the wall `wallFrame` finds in it. So the picker arrives with nothing chosen and
+asks *What shape is your room's floor?*, saying that most bedrooms are plain rectangles; the
+photos screen keeps *Your room: L-Shape · Change* under its title; and Continue opens *Does
+this look like your room?* — the outline with each photo pinned to the wall it will be
+measured as, and the shapes to swap to without leaving. A photo whose view has no wall
+straight ahead in the drawn outline (a U's Wall 1) is named there as the likely sign of a
+wrong shape. The decorating route still starts on Rectangle, because a wrong outline there
+costs a wall drag. The shape changes here only while it is still the picker's answer
+(`canReshape`): a room with a dragged wall or a saved arrangement shows its shape and says
+why it is not offered, rather than redrawing someone's work under it. A dragged wall is a
+stored `footprint` that differs from the preset's own (`isPresetOutline`), not merely a stored
+one — the studio writes the outline back on every shell save, so painting a wall stores the
+preset's polygon verbatim. A change keeps the photos on their walls, takes the new shape's
+typical size only while the size is still a guess (`roughSize`), and renames only a room
+still called after its old shape's starter. It **clears** two things keyed on the old
+outline: a scan (`detectedObjects`, measured from the old walls — the dialog says it will be
+looked for again, and the scan screen does), and wall paint (`wallColors`, keyed by edge
+index, which is a different wall in a different outline). While a shape is being written,
+Escape waits for it, so a failed write is said where the person is looking.
+
+**Still four photos, whatever the outline.** An L has six walls, and asking for one photo per
+wall would make a shortfall visible. It is not done: the four capture slots are the measuring
+model (`lib/capture-slots.ts`, `wallFrame`) and a fifth photo has no wall to be measured
+against. Recorded in `docs/what-is-still-open.md`.
+
 **The size is asked for on the shape picker, and skipping it is allowed** (D7). Three
 boxes under the outlines — width, depth, ceiling, in the user's unit — start at the
 selected shape's typical size and follow the shape until someone types, after which

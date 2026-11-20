@@ -2604,6 +2604,8 @@ textarea.field { border-radius: var(--r-2); }
 .pick-side__plan { aspect-ratio: 4 / 3; background: var(--paper-2); border-radius: var(--r-2); overflow: hidden; }
 .pick-side__caption { display: flex; flex-direction: column; gap: 2px; margin-top: 12px; font-variant-numeric: tabular-nums; }
 .pick-side__name { font-family: var(--font-display); font-size: var(--fs-title); line-height: 1.15; color: var(--ink); }
+/* The card before a shape is picked (the photo route asks rather than defaults). */
+.pick-side__ask { display: flex; flex-direction: column; gap: 6px; padding: 16px; background: var(--paper-2); border-radius: var(--r-2); }
 /* A stack in the card at every width: two 360px-wide buttons side by side do not
    fit a 320px column, and the row would wrap into an uneven pair. */
 .pick-side__actions { display: grid; margin-top: 16px; }
@@ -2639,6 +2641,14 @@ textarea.field { border-radius: var(--r-2); }
 .capture-guide { display: flex; flex-direction: column; gap: 16px; min-inline-size: 0; }
 .capture-guide__title { font-size: var(--fs-display); font-weight: 300; line-height: 1.1; letter-spacing: -0.01em; }
 .capture-guide__lede { margin: 6px 0 0; color: var(--ink-3); font-size: var(--fs-body); line-height: 1.5; }
+/* The room's shape, kept in view under the title (components/studio/ShapeCheck.tsx). */
+.shape-line { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 10px 0 0; color: var(--ink-2); }
+.shape-line__change { color: var(--accent-text); }
+/* The check before the scan: the plan with each photo pinned to its wall. */
+.shape-check__plan { display: block; inline-size: 100%; block-size: auto; max-block-size: 320px; background: var(--paper-2); border-radius: var(--r-2); }
+.shape-check__change { display: flex; margin-top: 12px; }
+.shape-check__failed { margin: 10px 0 0; color: var(--danger-text); }
+.shape-check__failed:empty { display: none; }
 .capture-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; counter-reset: capture-step; }
 .capture-steps > li {
   display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 10px; align-items: start;
@@ -3013,6 +3023,11 @@ textarea.field { border-radius: var(--r-2); }
 .shape-option__name { font-size: var(--fs-lead); font-weight: 700; }
 .shape-option[data-active] .shape-option__name { color: var(--accent-text); }
 .shape-option__size { font-size: var(--fs-caption); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+/* Five shapes inside a dialog (components/studio/ShapeCheck.tsx): three across, then
+   two, on shorter drawings. After the rules above, which it narrows. */
+.shape-options--compact { grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px; }
+.shape-options--compact .shape-option { padding-bottom: 10px; }
+.shape-options--compact .shape-option__thumb { aspect-ratio: 2 / 1; }
 /* The shape picker's room size (app/onboarding/layout-pick): optional, so it
    reads as a quiet form beside the drawing rather than a step of its own. */
 .size-entry__head {

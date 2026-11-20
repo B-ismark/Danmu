@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDimUnit, useRoom, useSettings, type DimUnit } from '@/lib/store';
 import { useMediaQuery } from '@/lib/use-media-query';
@@ -22,7 +22,7 @@ import { NumberField, fieldMinWidth } from '@/components/ui/NumberField';
 import { Select } from '@/components/ui/Select';
 import { FlowStepper } from '@/components/ui/FlowStepper';
 import { BackButton, DocShell } from '@/components/ui/DocShell';
-import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf } from '@/lib/room-presets';
+import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf, type PresetId } from '@/lib/room-presets';
 
 
 // The drawing and the area label are both DERIVED from footprintForLayout — the
@@ -54,10 +54,13 @@ import { ROOM_PRESETS as PRESETS, createPresetRoom, typicalOf } from '@/lib/room
  *  three. Figures a person reads belong to the interface's type scale, not the
  *  plan's. Null until measured: the labels wait one frame rather than guess a size,
  *  and the SVG's own `aria-label` carries the same numbers in the meantime. */
-function useScreenScale(ref: RefObject<SVGSVGElement | null>): ScreenScale | null {
+function useScreenScale(el: SVGSVGElement | null): ScreenScale | null {
   const [scale, setScale] = useState<ScreenScale | null>(null);
+  // Keyed on the ELEMENT, not a ref object: the drawing unmounts while the photo route
+  // asks for a shape and a new one mounts on the pick, and an observer bound once to
+  // the first node went on measuring a node that was gone — the labels kept their
+  // first-paint size through every resize and rotation after.
   useEffect(() => {
-    const el = ref.current;
     if (!el) return;
     const read = () => {
       const r = el.getBoundingClientRect();
@@ -71,7 +74,7 @@ function useScreenScale(ref: RefObject<SVGSVGElement | null>): ScreenScale | nul
     const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref]);
+  }, [el]);
   return scale;
 }
 
@@ -85,18 +88,31 @@ export default function LayoutPickPage() {
   const setRoomId = useRoom((s) => s.setRoomId);
   const dimUnit = useDimUnit();
   const setDimUnit = useSettings((s) => s.setDimUnit);
-  const [sel, setSel] = useState<(typeof PRESETS)[number]['id']>('rect');
+  // The shape the person PICKED, or null for none yet.
+  const [picked, setPicked] = useState<PresetId | null>(null);
   const [saving, setSaving] = useState<null | 'model' | 'capture'>(null);
   const [error, setError] = useState<string | null>(null);
   // Arriving from the Rooms page's "Photograph your room" (`?then=photos`): the
   // same two ways on, with the photo one leading. Read from the address after
   // mount rather than through `useSearchParams`, which would make the whole page
   // wait on a Suspense boundary for one boolean.
-  const [photoFirst, setPhotoFirst] = useState(false);
+  // Null until read: which route this is is unknown for the server render and the
+  // first paint, and that frame must not show (or let a press create) the Rectangle
+  // the photo route exists to stop defaulting to. Unknown asks, like the photo route.
+  const [photoFirst, setPhotoFirst] = useState<boolean | null>(null);
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- the address is only readable in the browser; the server render cannot know it
     setPhotoFirst(new URLSearchParams(window.location.search).get('then') === 'photos');
   }, []);
+  // On the photo route the shape is ASKED, never defaulted. It used to arrive set to
+  // Rectangle on both routes, and someone photographing an L-shaped room who did not
+  // know there was a choice to make pressed Continue on a rectangle — and nothing reads
+  // the outline off the photos (CLAUDE.md rule 2), so every wall was measured from the
+  // wrong one. A room made for decorating can start as a rectangle: dragging its walls
+  // costs nothing. A room made for MEASURING is only as right as this answer.
+  const sel: PresetId | null = picked ?? (photoFirst === false ? 'rect' : null);
+  const asking = sel === null;
+  const setSel = setPicked;
   // Roving tabindex needs the DOM nodes: arrow keys move focus, not just state.
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
 
@@ -109,10 +125,12 @@ export default function LayoutPickPage() {
   const [left, setLeft] = useState<ReadonlySet<RoomAxis>>(() => new Set());
   const [tried, setTried] = useState(false);
   const sizeRef = useRef<HTMLDivElement>(null);
-  const planRef = useRef<SVGSVGElement>(null);
-  const screen = useScreenScale(planRef);
+  const [planEl, setPlanEl] = useState<SVGSVGElement | null>(null);
+  const screen = useScreenScale(planEl);
 
-  const preset = PRESETS.find((p) => p.id === sel)!;
+  // With nothing picked, the size fields and their drawing are not shown; the
+  // rectangle only stands in so the arithmetic below has a shape to run on.
+  const preset = PRESETS.find((p) => p.id === (sel ?? 'rect'))!;
   const text = shownText(entry, typicalOf(preset), dimUnit);
   // Nothing typed is never wrong: the fields hold the shape's own typical size.
   const bad = entry ? badAxes(text, dimUnit) : [];
@@ -127,7 +145,7 @@ export default function LayoutPickPage() {
     const thumbPath = planFor(p.id, size.width, size.depth, fit).path;
     return { ...p, size, ...plan, thumbPath, areaText: formatArea(plan.area, dimUnit) };
   });
-  const layout = layouts.find((l) => l.id === sel)!;
+  const layout = layouts.find((l) => l.id === preset.id)!;
   const wText = formatLength(layout.size.width * 1000, dimUnit);
   const dText = formatLength(layout.size.depth * 1000, dimUnit);
 
@@ -140,8 +158,8 @@ export default function LayoutPickPage() {
   // One save path for both CTAs and the double-click — no duplicated persistence
   // logic to drift. The shape is passed rather than read from `sel`, so a
   // double-click starts the shape it landed on.
-  async function createRoom(dest: 'model' | 'capture', shapeId: (typeof PRESETS)[number]['id'] = sel) {
-    if (saving) return;
+  async function createRoom(dest: 'model' | 'capture', shapeId: PresetId | null = sel) {
+    if (saving || !shapeId || photoFirst === null) return;
     const shape = PRESETS.find((p) => p.id === shapeId)!;
     // Refused, not repaired: a size outside the room range is named with its range
     // and the room is not made. Saving the two good sides of a half-typed room, or
@@ -188,7 +206,7 @@ export default function LayoutPickPage() {
   const decorateButton = (
     <button
       onClick={() => createRoom('model')}
-      disabled={saving !== null}
+      disabled={saving !== null || asking}
       className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? '' : ' ds-btn--accent'}`}
     >
       {/* Named for the detour it skips when the page arrived for photos, so the
@@ -199,7 +217,7 @@ export default function LayoutPickPage() {
   const photoButton = (
     <button
       onClick={() => createRoom('capture')}
-      disabled={saving !== null}
+      disabled={saving !== null || asking}
       className={`ds-btn ds-btn--lg ds-btn--block-compact${photoFirst ? ' ds-btn--accent' : ''}`}
     >
       <Icon name="camera" size={14} color={photoFirst ? 'var(--on-accent)' : undefined} />
@@ -228,8 +246,23 @@ export default function LayoutPickPage() {
           than under the fold. Stacks to one column on a narrow window. */}
       <div className="pick">
         <div className="pick__main">
-          <h1 className="pick__title">Which room shape is closest to yours?</h1>
-          <p className="pick__lede">You can drag the walls to the exact size later.</p>
+          {photoFirst ? (
+            <>
+              <h1 className="pick__title">What shape is your room&rsquo;s floor?</h1>
+              {/* The two facts that make the question answerable by someone who never
+                  thought of a room as having a shape: what the common answer is, and
+                  what the uncommon ones look like from where they are standing. */}
+              <p className="pick__lede">
+                Picture it from above. Most bedrooms are plain rectangles. Pick an L, T or U only if a corner
+                sticks into the room or a nook juts out of it.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1 className="pick__title">Which room shape is closest to yours?</h1>
+              <p className="pick__lede">You can drag the walls to the exact size later.</p>
+            </>
+          )}
         <div role="radiogroup" aria-label="Room shape" className="shape-options">
           {layouts.map((l, i) => {
             const active = sel === l.id;
@@ -244,7 +277,8 @@ export default function LayoutPickPage() {
                 aria-label={`${l.name}, ${l.areaText} of floor, starts as a ${l.starter.toLowerCase()}`}
                 // Roving tabindex: one stop for the whole group, arrows move
                 // within it — the standard radiogroup keyboard contract.
-                tabIndex={active ? 0 : -1}
+                // With nothing picked yet, the first shape is the group's stop.
+                tabIndex={active || (asking && i === 0) ? 0 : -1}
                 onKeyDown={(e) => onOptionKeyDown(e, i)}
                 onClick={() => setSel(l.id)}
                 // The first click of the two has already picked it; this opens it, on
@@ -278,10 +312,21 @@ export default function LayoutPickPage() {
         </div>
         </div>
 
-        <section className="pick-side" aria-label={`${layout.name}, the chosen room shape`}>
+        <section className="pick-side" aria-label={asking ? 'Your room shape' : `${layout.name}, the chosen room shape`}>
+          {asking ? (
+            // Nothing picked: the card says what it is waiting for, rather than
+            // showing a rectangle the person never chose.
+            <div className="pick-side__ask" role="status">
+              <span className="pick-side__name">Pick a shape to go on</span>
+              <span className="t-small">
+                Not sure? Stand in the doorway and look along the walls. Four straight walls and four corners is a
+                rectangle.
+              </span>
+            </div>
+          ) : (
           <figure>
             <div className="pick-side__plan">
-              <svg ref={planRef} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} room shape, ${wText} by ${dText}, ${layout.areaText} of floor`}>
+              <svg ref={setPlanEl} viewBox="0 0 240 180" style={{ width: '100%', height: '100%', display: 'block' }} role="img" aria-label={`${layout.name} room shape, ${wText} by ${dText}, ${layout.areaText} of floor`}>
                 <path
                   d={layout.path}
                   fill="var(--accent-tint)"
@@ -300,11 +345,13 @@ export default function LayoutPickPage() {
               </span>
             </figcaption>
           </figure>
+          )}
 
           <div>
             {/* ROOM SIZE — optional, and it says so before anything else. Most people
                 do not know their room's measurements, so the fields arrive filled with
                 the shape's typical size and follow the shape until someone types. */}
+            {!asking && (
             <section aria-labelledby="room-size-title">
               <div className="size-entry__head">
                 <h2 id="room-size-title" className="size-entry__title">
@@ -372,6 +419,7 @@ export default function LayoutPickPage() {
                 )}
               </div>
             </section>
+            )}
 
             {error && (
               <p

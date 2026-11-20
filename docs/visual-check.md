@@ -300,6 +300,12 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Where:** a fresh browser profile: Rooms → any shape → *Start with photos*. Download the finder from the card under the heading, add photos while it runs, Continue. Then on the detect screen: a row with a repeat, a doubted size and a link, at 390px and 1440px. Also *Later* on the card, then Continue (the scan screen asks instead).
 - **Wrong looks like:** the card's bar stuck or restarting at zero on the scan screen; the scan screen asking to download again after the card finished; a dialog with no visible step name; a row carrying two notes at once; the link icon, eye and × crowding the name at 360px; the empty checkbox reading as a button with nothing on it.
 - **Needs:** any browser, a fresh profile, a real scan with photos, at phone width.
+- **Rides:** `b733a1d` (B-ismark/Danmu#329)
+
+### The room's shape is asked, shown and checked on the photo route
+- **Where:** Rooms → *Photograph your room* (nothing picked, both buttons off until a shape is). On the photos screen, *Your room: … · Change* under the title. Add photos, press Continue: *Does this look like your room?* → *Change the shape* → U-Shape. Also a room opened in the studio first, then *Resume* its photos. At 390px and 1440px.
+- **Wrong looks like:** the question reading as a test someone can fail, or the rectangle hint missed; a pinned photo covering its wall's number or another photo; the dialog's shapes running off a phone; Change offered on a room whose furniture is already laid out. On the picker, the size labels on the drawing not following a window resize or phone rotation after a shape is picked; a one-frame flash of *Pick a shape to go on* on the decorating route (the cost of not flashing Rectangle on the photo route).
+- **Needs:** any browser, and a real room with an L or U shape if one is to hand.
 - **Rides:** this branch (`claude/friendly-maxwell-cep4vz`)
 
 ### Paper colour and the room size hints
