@@ -360,7 +360,7 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Where:** a production build with the detector model exported into `public/models/` (`scripts/export-detector.py`); scan a photographed room on a laptop with WebGPU, then in a browser without it (WASM).
 - **Wrong looks like:** *detector unavailable*; a console error loading `/ort/ort-wasm-simd-threaded.jsep.mjs` or its `.wasm`; noticeably fewer pieces found than before on the same photos. The file names the runtime requests are pinned by `tests/ort-runtime.test.ts`; that the files RUN is not something a test here can show.
 - **Needs:** the exported model files and a browser, ideally one with WebGPU and one without.
-- **Rides:** this branch (`claude/admiring-maxwell-tpa1rj`)
+- **Rides:** `e07396a` (B-ismark/Danmu#336)
 
 ### Scan review rows: rename and size wording
 - **Where:** scan review, type a new name on a row (shelf → "Shoe rack", lamp → "Ceiling light", bed → "fri", sofa → "lamp"), with and without a measured room; on a phone, tap an option. *Photograph your real room* with a sofa/bed foot-cut, a stool tipped down, a sofa cut at the side, a door cut at the bottom; rename to Chair/TV and press *Use X?*.
