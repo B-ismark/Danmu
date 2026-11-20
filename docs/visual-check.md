@@ -344,6 +344,18 @@ cannot tell you: how a change looks, feels, sounds or behaves on a real device.
 - **Needs:** a real scan with photos and a key.
 - **Rides:** `bd09f2f` (B-ismark/Danmu#171), `a080c3e` (B-ismark/Danmu#172), `408cdbe` (B-ismark/Danmu#173)
 
+### Cloud scan and key check after the Google library went to version 3
+- **Where:** Settings, paste a real Gemini key and check it; then a cloud scan of two walls.
+- **Wrong looks like:** a good key reported as bad or *something went wrong*; the scan answering with an error about the model or `responseMimeType`, or an empty room for photos full of furniture. The library's default service version moved from `v1beta` to `v1`; both requests are pinned back to `v1beta` in `lib/gemini-client.ts`, and only a real request proves the pin reaches Google.
+- **Needs:** a real Gemini key.
+- **Rides:** `1b824ae` (B-ismark/Danmu#335)
+
+### On-device detection after the runtime went to 1.31
+- **Where:** a production build with the detector model exported into `public/models/` (`scripts/export-detector.py`); scan a photographed room on a laptop with WebGPU, then in a browser without it (WASM).
+- **Wrong looks like:** *detector unavailable*; a console error loading `/ort/ort-wasm-simd-threaded.jsep.mjs` or its `.wasm`; noticeably fewer pieces found than before on the same photos. The file names the runtime requests are pinned by `tests/ort-runtime.test.ts`; that the files RUN is not something a test here can show.
+- **Needs:** the exported model files and a browser, ideally one with WebGPU and one without.
+- **Rides:** this branch (`claude/admiring-maxwell-tpa1rj`)
+
 ### Scan review rows: rename and size wording
 - **Where:** scan review, type a new name on a row (shelf → "Shoe rack", lamp → "Ceiling light", bed → "fri", sofa → "lamp"), with and without a measured room; on a phone, tap an option. *Photograph your real room* with a sofa/bed foot-cut, a stool tipped down, a sofa cut at the side, a door cut at the bottom; rename to Chair/TV and press *Use X?*.
 - **Wrong looks like:** no list while the word names a Library piece; one option where a family has two; the row keeping the half-typed word or old model; the tap also toggling the next row or an offer chip; "Floor lamp" → "Tall lamp" offering another lamp; a renamed "Painting" not on the wall; "about"/"at least" missing on the cut axis or on the whole one; both on one line; a bare *2.67 m* with no *wide/tall*; chips wrapping under the tick at 360 px; a flagged correct piece needing more than one tap.

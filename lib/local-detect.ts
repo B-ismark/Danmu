@@ -230,9 +230,10 @@ export const NAME_TO_SHAPE: Partial<Record<string, Shape>> = {
 //
 // ORT_VERSION must match that devDependency exactly, or the types compiled
 // against will drift from the wasm actually executed. Both are pinned (no
-// caret) so a lockfile refresh can't move one without the other.
+// caret) so a lockfile refresh can't move one without the other, and
+// `tests/ort-runtime.test.ts` fails the moment the two disagree.
 type OrtNS = typeof import('onnxruntime-web');
-const ORT_VERSION = '1.27.0';
+const ORT_VERSION = '1.31.1';
 const ORT_LOCAL_BASE = '/ort/';
 const ORT_ENTRY = 'ort.min.mjs';
 
