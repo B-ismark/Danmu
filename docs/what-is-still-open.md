@@ -10993,3 +10993,28 @@ conditioner keep their TOP — a fan typed taller used to push through the slab,
 shorter dropped away from it — a door keeps its threshold on the floor, and a TV, print or
 window keeps its centre, the height a person chose. Then the band a drag clamps to;
 `tests/scene-build.test.ts` now lists this as the fifth `MOUNT_PAD` clamper.
+
+## § 59 · One photo per wall the shape has — DECIDED AGAINST FOR NOW 2026-11-20, open to the user
+
+**Exists in a commit:** no. The shape check it was proposed beside does (`lib/room-reshape.ts`,
+`components/studio/ShapeCheck.tsx`).
+
+The proposal: an L has six walls, so ask for six photos, each lit on the plan as it is
+taken. A person whose photos run out before the walls do would notice the shape is wrong,
+and the photo count would mean something.
+
+Why it is not built: the four capture slots are not a count of walls. They are the four
+directions the lens can face from the middle of the room (`lib/capture-slots.ts`), and
+`wallFrame` measures each photo against whichever wall is straight ahead in that direction.
+A fifth or sixth photo of an L's return walls would be shot from the same spot, at an angle,
+of a wall that is not straight ahead. The geometry has no frame to measure it against, so it
+would add a picture and nothing measured. Building it means a second origin per photo (stand
+in the nook, face its wall), carried through placement, scan merging and the capture ladder.
+That is a change to the measuring model, not to the flow.
+
+What covers the same failure now: the shape is asked rather than defaulted on the photo
+route, kept in view on the photos screen, and checked with each photo pinned to its wall
+before the scan. A photo with no wall ahead in the drawn outline is named there as the
+likely sign of a wrong shape.
+
+The user decides: build the second-origin model, or leave this closed.
