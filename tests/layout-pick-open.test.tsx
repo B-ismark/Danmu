@@ -99,11 +99,38 @@ describe('the footprint page', () => {
     }
   });
 
+  it('arriving for photos, asks for the shape rather than defaulting to a rectangle', async () => {
+    // A room made for measuring is only as right as its outline, and someone who did
+    // not know there was a choice used to press Continue on the Rectangle it arrived
+    // set to. Nothing is picked until they pick, and neither way on works before.
+    window.history.replaceState(null, '', '/onboarding/layout-pick?then=photos');
+    try {
+      render(<LayoutPickPage />);
+      const photo = await screen.findByRole('button', { name: /^Continue$/ });
+      await waitFor(() => expect(screen.getAllByRole('radio').every((r) => r.getAttribute('aria-checked') === 'false')).toBe(true));
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toMatch(/What shape is your room/);
+      expect(screen.getByText(/Most bedrooms are plain rectangles/)).toBeTruthy();
+      expect((photo as HTMLButtonElement).disabled).toBe(true);
+      expect((screen.getByRole('button', { name: /^Skip photos$/ }) as HTMLButtonElement).disabled).toBe(true);
+      // The group still has one Tab stop with nothing chosen.
+      expect(screen.getAllByRole('radio').filter((r) => r.tabIndex === 0)).toHaveLength(1);
+      expect(screen.queryByRole('heading', { name: /Room size/ })).toBeNull();
+      fireEvent.click(screen.getByRole('radio', { name: /^Rectangle/ }));
+      expect((photo as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(photo);
+      await waitFor(() => expect(router.push).toHaveBeenCalledWith('/onboarding/capture'));
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
+  });
+
   it('arriving any other way, Start decorating leads', () => {
     render(<LayoutPickPage />);
     const photo = screen.getByRole('button', { name: /^Start with photos/ });
     const start = screen.getByRole('button', { name: /^Start decorating/ });
     expect(start.className).toContain('ds-btn--accent');
+    // Decorating can start on a rectangle: its walls drag for free.
+    expect(screen.getByRole('radio', { name: /^Rectangle/ }).getAttribute('aria-checked')).toBe('true');
     expect(start.compareDocumentPosition(photo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Most people who pick a shape go straight to the studio: no four-step promise.
     expect(screen.queryByRole('list', { name: 'Steps to your room' })).toBeNull();
