@@ -88,7 +88,8 @@ owned by a deterministic geometry engine, not by a model.
    3D scene, 2D plan, inspector tree, catalog and decor all read from it.
 5. **No hard-coded design values.** Colours / spacing / type flow through tokens
    in `app/globals.css`, which is their sole source. Tailwind is present for
-   Preflight only — its theme is empty and no utility class is used anywhere, so
+   Preflight only — `globals.css` imports `tailwindcss/preflight.css` alone, so it
+   has no theme and generates no utility class, and
    every `className` resolves to a hand-written class in `globals.css`.
    **Three families were added late, because they had been escaping the rule.**
    *Content measure* (`--measure-page`, `--measure-page-prose`, `--measure-text`,

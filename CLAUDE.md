@@ -563,8 +563,9 @@ backend, no account. The 3D studio *is* the product.
    word — do not "fix" it to `--edge`, which puts two outlines on every button. Text on a
    filled surface uses `--on-accent` / `--on-ink`, never `#fff`. z-index comes
    from the `--z-*` scale only, including `--z-sticky-local` for a sticky header
-   inside its own scroll box. Tailwind is present for Preflight only — no utility
-   classes are used and its theme is intentionally empty, so `globals.css` is the
+   inside its own scroll box. Tailwind is present for Preflight only — `globals.css`
+   imports `tailwindcss/preflight.css` alone, so there is no theme and no utility
+   class exists to use, and `globals.css` is the
    sole token source. **Any layer that cannot read a custom property** — the 3D
    scene, the floor-plan canvas export, **and the web manifest** — reads
    `lib/scene-palette.ts` (`SCENE`, `PLAN`, `defaultBodyColor(category, shape)`) or,

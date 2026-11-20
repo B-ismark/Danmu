@@ -15,8 +15,8 @@ every current feature, architecture, geometry engine, and roadmap).
 
 ## Stack
 
-- **Next.js 15.5** (App Router) + **React 19.2** + **TypeScript 5.9**
-- **Tailwind 3.4** — Preflight only (empty theme, no utility classes). Design
+- **Next.js 16** (App Router) + **React 19** + **TypeScript 6** (7 is held: typescript-eslint does not support it yet)
+- **Tailwind 4** — Preflight only (imported alone: no theme, no utility classes). Design
   tokens live in [`app/globals.css`](app/globals.css), which is their sole source
 - **Three.js** + **@react-three/fiber 9** + **drei 10** + **postprocessing 3** — declarative 3D
   (the React 19 line; see [Design.md](Design.md) — fiber 8 + drei 9 cannot run
@@ -68,7 +68,7 @@ without any key: pick a footprint and start decorating.
 - **Single source of truth for furniture:** [`lib/scene-spec.ts`](lib/scene-spec.ts).
   3D scene, 2D plan, inspector tree, catalog, and decor all read from it.
 - **No hard-coded design values.** Colours / spacing / type go through tokens in
-  `app/globals.css` — the sole token source. Tailwind is Preflight-only (empty
+  `app/globals.css` — the sole token source. Tailwind is Preflight-only (no
   theme, no utility classes); anything a renderer cannot read a custom property
   from goes through [`lib/scene-palette.ts`](lib/scene-palette.ts).
 - **Dimensions come from code, not AI.** All sizes pass through `clampDims`
