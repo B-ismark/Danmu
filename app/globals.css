@@ -2335,9 +2335,11 @@ textarea.field { border-radius: var(--r-2); }
   position: fixed; left: 0; right: 0; margin-inline: auto; width: fit-content;
   bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   z-index: var(--z-canvas-hint);
-  box-shadow: var(--shadow-float);
   max-width: calc(100vw - 32px);
+  /* Two pills — Show interface and Add — that wrap rather than spill on a narrow phone. */
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 8px;
 }
+.show-ui__btn { box-shadow: var(--shadow-float); }
 .show-ui__keys { display: inline-flex; gap: 3px; margin-left: 2px; }
 @media (hover: none) { .show-ui__keys { display: none; } }
 

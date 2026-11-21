@@ -72,6 +72,11 @@ export function SwapModelModal({
   );
 }
 
+/** "Monitor", "Monitor and Laptop", "Monitor, Lamp and Laptop". */
+function listNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** The one mount of the swap dialog on a room tab. The Inspector's button and the
  *  right-click menu both open it by naming the piece (`setSwapPartId`); a piece
  *  deleted or undone away while it is open closes it rather than swapping nothing. */
@@ -101,6 +106,18 @@ export function SwapModelHost() {
           toast({ title: `${item.label} doesn't fit here`, message: 'It would go through a wall at either turn, so the piece was kept as it was.' });
         } else if (result.ok && result.turned) {
           toast({ title: `${item.label} turned to fit`, message: 'It only fits here at a quarter turn.' });
+        }
+        // What stood on the old piece and has no room on the new one went to the floor
+        // beside it. Said, because nobody asked for those pieces to move.
+        if (result.ok && result.grounded.length > 0) {
+          const them = result.grounded.length === 1 ? 'it' : 'them';
+          const why = result.holds
+            ? `There wasn't room for ${them} on the ${item.label.toLowerCase()}.`
+            : `Nothing stands on a ${item.label.toLowerCase()}.`;
+          // A piece that found no clear floor either is touching something: said, so the
+          // room check finding it later is not the first anyone hears of it.
+          const crowded = result.crowded.length > 0 ? ` ${listNames(result.crowded)} found no clear spot and touches what is next to it.` : '';
+          toast({ title: `Moved to the floor: ${listNames(result.grounded)}`, message: why + crowded });
         }
         close();
       }}

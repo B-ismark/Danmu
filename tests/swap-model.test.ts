@@ -430,7 +430,7 @@ describe('changing the model', () => {
     const table: LibraryItem = { label: 'Long table', group: 'Tables', category: 'table', shape: 'coffee-table', dimMM: [2000, 900, 750] };
     // It no longer ends 27 mm through the plaster: at a quarter turn the table runs
     // along the arm, fits, and the swap says it turned (§ 50 item 1).
-    expect(swapPartModel('p', table)).toEqual({ ok: true, turned: true });
+    expect(swapPartModel('p', table)).toEqual({ ok: true, turned: true, grounded: [], crowded: [], holds: true });
     const at = useStudio.getState().positions.p!;
     const rot = useStudio.getState().rotations.p!;
     expect(Math.abs(Math.sin(rot))).toBeCloseTo(1, 9);

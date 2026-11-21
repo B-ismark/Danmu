@@ -45,6 +45,7 @@ export type CueWorld = {
     decor?: unknown;
     woodFinish?: string;
     fabricFinish?: string;
+    curtainOpen?: boolean;
     groupId?: string;
   }>;
   wallColors: Readonly<Record<number, string>>;
@@ -148,7 +149,7 @@ export function cueFor(prev: CueWorld, next: CueWorld, opts: { afterDrag?: boole
   for (const p of next.parts) {
     const q = before.get(p.id);
     if (!q) continue;
-    if (q.color !== p.color || q.woodFinish !== p.woodFinish || q.fabricFinish !== p.fabricFinish) restyled++;
+    if (q.color !== p.color || q.woodFinish !== p.woodFinish || q.fabricFinish !== p.fabricFinish || q.curtainOpen !== p.curtainOpen) restyled++;
     else if (differs(q.decor, p.decor)) found.push({ name: 'place', opts: { size: 0.05 } });
     if (q.groupId !== p.groupId) found.push({ name: 'snap' });
   }

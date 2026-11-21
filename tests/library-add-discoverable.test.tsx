@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// Phase 0, "adding a piece is easy to find": the A key, the plan tab's canvas trigger,
+// Phase 0, "adding a piece is easy to find": the Shift+A key, the plan tab's canvas trigger,
 // the size-example chips and the touch hold. Mounted as the real plan page inside the
 // real studio layout for the reason `library-click-through.test.tsx` gives.
 import 'fake-indexeddb/auto';
@@ -45,16 +45,23 @@ beforeEach(() => {
 const surface = () => document.getElementById(STUDIO_SURFACE_ID)!;
 const press = (init: KeyboardEventInit, target: Element = surface()) => fireEvent.keyDown(target, init);
 
-describe('the A key', () => {
+describe('the Shift+A key', () => {
   it('toggles the Library while the room has focus', () => {
     render(<PlanPage />);
     surface().focus();
-    press({ key: 'a' });
+    press({ key: 'A', shiftKey: true });
     expect(useStudio.getState().catalogOpen).toBe(true);
     // Opening hands focus to the search field, so A types there; closing by key
     // needs the room focused again (a press on the canvas does that).
     surface().focus();
-    press({ key: 'A' });
+    press({ key: 'A', shiftKey: true });
+    expect(useStudio.getState().catalogOpen).toBe(false);
+  });
+
+  it('a bare A does nothing, so a stray key does not throw the card over the room', () => {
+    render(<PlanPage />);
+    surface().focus();
+    press({ key: 'a' });
     expect(useStudio.getState().catalogOpen).toBe(false);
   });
 
@@ -62,7 +69,7 @@ describe('the A key', () => {
     useStudio.setState({ catalogOpen: true });
     render(<PlanPage />);
     const field = screen.getByLabelText('Search the Library');
-    press({ key: 'a' }, field);
+    press({ key: 'A', shiftKey: true }, field);
     expect(useStudio.getState().catalogOpen).toBe(true);
   });
 
@@ -70,7 +77,7 @@ describe('the A key', () => {
     render(<PlanPage />);
     const btn = screen.getAllByRole('button')[0];
     btn.focus();
-    press({ key: 'a' }, btn);
+    press({ key: 'A', shiftKey: true }, btn);
     expect(useStudio.getState().catalogOpen).toBe(false);
   });
 
@@ -82,11 +89,11 @@ describe('the A key', () => {
     expect(useStudio.getState().catalogOpen).toBe(false);
   });
 
-  it('Alt+A and Shift+A are not ours', () => {
+  it('Alt+A and Alt+Shift+A are not ours', () => {
     render(<PlanPage />);
     surface().focus();
     press({ key: 'a', altKey: true });
-    press({ key: 'A', shiftKey: true });
+    press({ key: 'A', altKey: true, shiftKey: true });
     expect(useStudio.getState().catalogOpen).toBe(false);
   });
 });

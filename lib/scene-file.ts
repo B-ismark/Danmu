@@ -727,6 +727,14 @@ function readPart(
   const blockStyle = readBlockStyle(v.blockStyle, shape, part.name, dropped);
   if (blockStyle) part.blockStyle = blockStyle;
 
+  // Absent and `false` both mean drawn, so only `true` is kept, and only on a curtain.
+  if (v.curtainOpen === true) {
+    if (shape === 'curtain') part.curtainOpen = true;
+    else dropped.push(`“${part.name}” is not a curtain, so its curtainOpen was left out`);
+  } else if (v.curtainOpen !== undefined && v.curtainOpen !== false) {
+    dropped.push(`“${part.name}” gave a curtainOpen that is neither true nor false, so it was left drawn`);
+  }
+
   // A made piece's blocks are read like the parts around them — every block's shape,
   // category, size and colour checked by `readMadeSpec` — and a field on any other
   // shape is ignored. A made piece whose blocks are all unreadable is kept, as the plain

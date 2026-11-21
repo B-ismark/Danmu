@@ -176,7 +176,16 @@ function modelSections(): HelpSectionSpec[] {
       note: 'Click the room first. Keys do nothing while you are in a panel.',
       body: (
         <HelpKeys>
-          <HelpKey keys={<Kb>A</Kb>}>open or close the Library</HelpKey>
+          <HelpKey
+            keys={
+              <>
+                <Kb>Shift</Kb>
+                <Kb>A</Kb>
+              </>
+            }
+          >
+            open or close the Library
+          </HelpKey>
           <HelpKey keys={<Kb>W</Kb>}>move</HelpKey>
           <HelpKey keys={<Kb>S</Kb>}>resize</HelpKey>
           <HelpKey keys={<Kb>R</Kb>}>spin</HelpKey>
@@ -476,7 +485,16 @@ function planSections(): HelpSectionSpec[] {
           >
             hold Shift with the arrows to turn it
           </HelpKey>
-          <HelpKey keys={<Kb>A</Kb>}>opens the Library</HelpKey>
+          <HelpKey
+            keys={
+              <>
+                <Kb>Shift</Kb>
+                <Kb>A</Kb>
+              </>
+            }
+          >
+            opens the Library
+          </HelpKey>
           <HelpKey keys={<Kb>F</Kb>}>brings the selected piece to the middle</HelpKey>
           <HelpKey keys={<Kb>H</Kb>}>hides it</HelpKey>
           <HelpKey keys={<Kb>Tab</Kb>}>steps through the pieces and the walls</HelpKey>

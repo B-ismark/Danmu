@@ -532,6 +532,10 @@ export type ScenePart = {
   /** What its upholstery is (`lib/part-finish.ts`). Absent = linen, the weave every
    *  piece is drawn in. Only a shape in `FABRIC_SHAPES` is offered the choice. */
   fabricFinish?: FabricFinish;
+  /** A curtain folded up into two tied-back stacks at the ends of its rod, the window
+   *  between them clear. Absent = drawn across the rod, which is how every curtain is
+   *  placed. `shape: 'curtain'` only; any other piece never carries it. */
+  curtainOpen?: boolean;
   /** group id — parts sharing one move together (multi-select merge). */
   groupId?: string;
 };

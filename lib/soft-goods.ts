@@ -770,13 +770,66 @@ export const SHOE_SOLE_MESH: SoftMeshData = buildSole();
 
 // ─── Curtain ─────────────────────────────────────────────────────────────────
 
-/** A curtain as one cloth hanging in waves from the rod, at its own `dimMM`: one wave per
+/** A curtain as one cloth hanging from the rod, at its own `dimMM`. DRAWN (the default)
+ *  it hangs across the whole rod: one wave per
  *  two pleats of `moduleCount`, gathered tighter at the header and deepening toward the
  *  hem, each wave a little different so the folds do not read as corrugated sheet. Inside
- *  the curtain's depth on both sides of its centre plane. */
-export const curtainCloth = memoLast(buildCurtain, (dimMM: readonly number[], pleats: number) => `${dimMM.join('x')}|${pleats}`);
+ *  the curtain's depth on both sides of its centre plane. OPEN it is folded up into two
+ *  tied-back stacks, one at each end (`buildOpenCurtain`). */
+export const curtainCloth = memoLast(
+  buildCurtain,
+  (dimMM: readonly number[], pleats: number, open = false) => `${dimMM.join('x')}|${pleats}|${open ? 'open' : 'drawn'}`,
+);
 
-function buildCurtain(dimMM: readonly number[], pleats: number): SoftMeshData {
+/** The share of the rod each stack of an OPEN curtain covers, at the header. The rest
+ *  of the cloth is folded into those two stacks, so the window between them is clear. */
+export const CURTAIN_STACK_SHARE = 0.2;
+
+/** How far the tie-back pinches an open curtain's stack in toward its outer edge, and
+ *  where — a share of the stack's width and of the drop from the hem. */
+const TIE_PINCH = 0.4;
+const TIE_AT = 0.42;
+
+function buildCurtain(dimMM: readonly number[], pleats: number, open = false): SoftMeshData {
+  return open ? buildOpenCurtain(dimMM, pleats) : buildDrawnCurtain(dimMM, pleats);
+}
+
+/** Open: the same cloth folded up into a stack at each end of the rod and caught by a
+ *  tie-back a little below half its drop — the hourglass a gathered curtain makes. The
+ *  folds are deeper than a drawn curtain's, because the same width of cloth now sits in a
+ *  fifth of the rod; still inside the curtain's depth, so its box is unchanged. */
+function buildOpenCurtain(dimMM: readonly number[], pleats: number): SoftMeshData {
+  const w = dimMM[0] / 1000;
+  const d = dimMM[1] / 1000;
+  const h = dimMM[2] / 1000;
+  const sw = w * CURTAIN_STACK_SHARE;
+  const n = Math.max(1, Math.ceil(Math.max(1, pleats) / 2));
+  const strip = sw / n;
+  const amp = Math.max(0, Math.min(d / 2 - 0.002, strip * 0.9));
+  const ts = even(0, 1, n * 4);
+  const ys = even(-h / 2, h / 2 - 0.04, 24);
+  const b = new Builder();
+  for (const side of [-1, 1] as const) {
+    const outer = side * (w / 2);
+    b.grid(
+      ts,
+      ys,
+      (t, y) => {
+        const yn = (y + h / 2) / h;
+        // 1 at the header and the hem, 1 − TIE_PINCH at the tie-back.
+        const pinch = 1 - TIE_PINCH * Math.exp(-(((yn - TIE_AT) / 0.14) ** 2));
+        const x = outer - side * t * sw * pinch;
+        const xi = t * n * 2;
+        const vary = 0.85 + 0.15 * Math.sin(Math.floor(xi / 2) * 2.39 + side);
+        return [x, y, amp * vary * Math.sin(Math.PI * xi)];
+      },
+      side > 0,
+    );
+  }
+  return b.done();
+}
+
+function buildDrawnCurtain(dimMM: readonly number[], pleats: number): SoftMeshData {
   const w = dimMM[0] / 1000;
   const d = dimMM[1] / 1000;
   const h = dimMM[2] / 1000;

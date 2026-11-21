@@ -196,8 +196,11 @@ describe('…and nothing standing on the piece holds it up', () => {
       expect(useScene.getState().parts.find((p) => p.id === 'box')?.shape).toBe('ottoman');
       expect(s.positions.box?.[1]).toBe(0);
       expect(s.parentIds.box).toBeUndefined();
-      // The tray is left riding it, as it was.
-      expect(s.parentIds.tray).toBe(linked ? 'box' : undefined);
+      // The tray is 200 mm wider than the ottoman, so it no longer has a top to stand
+      // on and goes to the floor beside it (`lib/swap-riders.ts`) — not up in the air
+      // at the box's old height, and not riding a piece it hangs off.
+      expect(s.parentIds.tray).toBeUndefined();
+      expect(s.positions.tray?.[1]).toBe(0);
     });
   }
 });

@@ -1126,7 +1126,8 @@ function CurtainGeo({ part }: { part: ScenePart }) {
   const cloth = tint(part);
   // One cloth hanging in soft waves from the rod, a wave per two pleats — gathered at the
   // header, deeper toward the hem, no two quite alike.
-  const drape = curtainCloth(part.dimMM, moduleCount(w, PLEAT));
+  // Open, the same cloth is folded up into a tied-back stack at each end of the rod.
+  const drape = curtainCloth(part.dimMM, moduleCount(w, PLEAT), part.curtainOpen === true);
   return (
     <>
       {/* horizontal rod */}

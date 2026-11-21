@@ -343,6 +343,10 @@ export const useScene = create<SceneState>((set, get) => ({
         // A new model has none of the old one's options (a screen's band means nothing to a
         // worktop), so a swap clears them unless the same patch brings its own.
         if (patch.shape !== undefined && patch.shape !== p.shape && !('blockStyle' in patch)) delete next.blockStyle;
+        // Open or drawn is a curtain's option only: an open curtain swapped for a print
+        // must not carry it (a file would then report its own export), nor come back
+        // open if it is swapped back.
+        if (patch.shape !== undefined && patch.shape !== 'curtain' && !('curtainOpen' in patch)) delete next.curtainOpen;
         // A finish survives a swap only where the new model has that surface: a velvet
         // sofa swapped for an armchair stays velvet, one swapped for a bookshelf keeps
         // no invisible velvet to revive later.

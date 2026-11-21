@@ -331,7 +331,8 @@ function PhoneShell({ surface }: { surface: ReactNode }) {
         ref={sheetRef}
         id={SHEET_ID}
         className="sheet"
-        style={uiHidden ? { display: 'none' } : undefined}
+        // The Library is the one sheet that may rise while the interface is hidden.
+        style={uiHidden && !(catalogOpen && panel === 'add') ? { display: 'none' } : undefined}
         data-snap={snap}
         data-fit={fit || undefined}
         aria-label={title}

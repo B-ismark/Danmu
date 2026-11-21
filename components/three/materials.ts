@@ -26,7 +26,7 @@ const NORMAL_SCALE_METAL = new Vector2(0.35, 0.35);
 const NORMAL_SCALE_PAINTED = new Vector2(0.45, 0.45);
 const NORMAL_SCALE_LACQUER = new Vector2(0.25, 0.25);
 const NORMAL_SCALE_VELVET = new Vector2(0.5, 0.5);
-const NORMAL_SCALE_BOUCLE = new Vector2(1.3, 1.3);
+const NORMAL_SCALE_BOUCLE = new Vector2(0.7, 0.7);
 
 // Tuned-hybrid: matte-leaning. Metals are brushed (not mirror), gloss is gentle.
 export const SURFACE = {

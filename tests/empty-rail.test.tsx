@@ -48,7 +48,7 @@ describe('with nothing selected', () => {
   it('puts Add under the prompt, once, and no footer at all', () => {
     render(<Rail />);
     expect(screen.getByText(/a piece to style it/)).toBeTruthy();
-    expect(screen.getByText(/press A to bring something in from the Library/)).toBeTruthy();
+    expect(screen.getByText(/press Shift\+A to bring something in from the Library/)).toBeTruthy();
     expect(adds()).toHaveLength(1);
     expect(adds()[0].closest('.empty-inspector__actions')).not.toBeNull();
     expect(footer()).toBeNull();

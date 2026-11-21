@@ -606,6 +606,11 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
     // would have been the defect: the reverted § 12 attempt derived a rider's new
     // height and did not clamp it, so the two paths disagreed by up to 1.22 m —
     // silently, unreported, and with the docblock claiming they could not disagree.
+    //
+    // `swap-riders.ts` is the sixth, and it reads the cap to REFUSE rather than clamp:
+    // a rider that would pass the ceiling on a swapped-in top goes to the floor instead
+    // of being pushed down into the piece by `rider-height.ts`'s clamp (a lamp on a
+    // nightstand swapped for a wardrobe ended 320 mm inside it).
     const clampers = modules.filter((m) => /-\s*MOUNT_PAD/.test(m.src)).map((m) => m.file).sort();
     expect(clampers, 'the sweep must actually find the clampers').toEqual([
       'drag-resolve.ts',
@@ -613,6 +618,7 @@ describe('one ceiling clearance: the duplication itself, not just its drift', ()
       'mount-resize.ts',
       'physics.ts',
       'rider-height.ts',
+      'swap-riders.ts',
     ]);
   });
 });
