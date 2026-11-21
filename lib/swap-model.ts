@@ -14,7 +14,7 @@ import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, seeksSurf
 import { containedXZ } from './layout-settle';
 import { placeArrival } from './duplicate-place';
 import { riderRelation, ridersOf } from './rider-height';
-import { reseatRiders } from './swap-riders';
+import { holdsThings, reseatRiders } from './swap-riders';
 import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
 import { edgeProjection, footFromPart, outsideDeficit, polygonWinding } from './geometry';
 import { interiorPoint, polygonCentroid, type Footprint } from './footprint';
@@ -49,6 +49,12 @@ export type SwapResult = {
   /** What stood on the piece and no longer fits on the new one, now on the floor
    *  beside it — by name, for the caller to say. */
   grounded: string[];
+  /** Of `grounded`, those that found no clear floor nearby either and stand touching
+   *  something — said apart, because "moved to the floor" promises a clear spot. */
+  crowded: string[];
+  /** Whether the new piece holds anything up at all. When it does not (a painting, a
+   *  rug) the caller says THAT, not that there was no room on it. */
+  holds: boolean;
 } | { ok: false; refused: 'does-not-fit' } | { ok: false; refused: 'gone' };
 
 /** How far through the walls a floor piece may end and still count as inside: the
@@ -231,9 +237,17 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   else s.clearParent(id);
   if (riderPlan) {
     s.setTransformsFor(riderPlan.moves);
-    for (const r of riderPlan.seated) s.setParent(r, id);
-    for (const r of riderPlan.grounded) s.clearParent(r);
+    // Only links that change: a rider already linked here keeps the link it has.
+    const links = useStudio.getState().parentIds;
+    for (const r of riderPlan.seated) if (links[r] !== id) s.setParent(r, id);
+    for (const r of riderPlan.grounded) if (links[r] !== undefined) s.clearParent(r);
   }
-  const grounded = (riderPlan?.grounded ?? []).map((r) => company.find((p) => p.id === r)?.name ?? r);
-  return { ok: true, turned, grounded };
+  const nameOf = (r: string) => company.find((p) => p.id === r)?.name ?? r;
+  return {
+    ok: true,
+    turned,
+    grounded: (riderPlan?.grounded ?? []).map(nameOf),
+    crowded: (riderPlan?.crowded ?? []).map(nameOf),
+    holds: holdsThings({ category: item.category, shape: item.shape, wallMounted }),
+  };
 }

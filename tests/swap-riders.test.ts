@@ -19,6 +19,7 @@ import { footArea, footFromPart, footIntersectionArea, footOverlap, TOUCH_M } fr
 import { verticalExtent } from '@/lib/physics';
 import { PART_LIBRARY, type LibraryItem, type ScenePart } from '@/lib/scene-spec';
 import { reseatRiders } from '@/lib/swap-riders';
+import { bestMs, ceilingMs } from './helpers/perf';
 
 const lib = (label: string): LibraryItem => PART_LIBRARY.find((r) => r.label === label)!;
 
@@ -58,7 +59,7 @@ describe('swapping the table under a monitor and a laptop', () => {
       { monitor: 'desk', laptop: 'desk' },
     );
     const r = swapPartModel('desk', lib('Desk'));
-    expect(r).toEqual({ ok: true, turned: false, grounded: [] });
+    expect(r).toEqual({ ok: true, turned: false, grounded: [], crowded: [], holds: true });
     const t = live('desk');
     for (const id of ['monitor', 'laptop']) {
       const p = live(id);
@@ -116,6 +117,8 @@ describe('swapping the table under a monitor and a laptop', () => {
   it('swapped for something nothing stands on, its company goes to the floor', () => {
     const r = swapPartModel('desk', lib('Painting'));
     expect(r.ok && [...r.grounded].sort()).toEqual(['Laptop', 'Monitor']);
+    // Said as "nothing stands on it", not "there wasn't room".
+    expect(r.ok && r.holds).toBe(false);
     expect(live('monitor').pos[1]).toBe(0);
     expect(live('laptop').pos[1]).toBe(0);
   });
@@ -145,5 +148,106 @@ describe('reseatRiders, the plan on its own', () => {
     expect(move.pos[2]).toBeCloseTo(0.35, 9);
     expect(move.rot).toBeCloseTo(Math.PI / 2, 9);
     expect(plan.seated).toEqual(['monitor']);
+  });
+
+  it('a table turned a third of the way round carries its rider in ITS frame, not the world’s', () => {
+    // Every fixture above stands at rot 0, where the table's frame and the room's are the
+    // same frame and swapping `worldToLocal` for `localToWorld` changes nothing.
+    const a = Math.PI / 3;
+    const b = a + Math.PI / 2;
+    const before = { ...desk, pos: [0.4, 0, -0.3] as [number, number, number], rot: a };
+    const after = { ...desk, pos: [0.4, 0, -0.3] as [number, number, number], rot: b, dimMM: [1600, 900, 750] as [number, number, number] };
+    // Local (0.3, −0.1) in the three.js frame: x along (cos, −sin), z along (sin, cos).
+    const at = (rot: number, lx: number, lz: number) => [lx * Math.cos(rot) + lz * Math.sin(rot), -lx * Math.sin(rot) + lz * Math.cos(rot)];
+    const [wx, wz] = at(a, 0.3, -0.1);
+    const rider = { ...laptop, pos: [0.4 + wx, DESK_TOP, -0.3 + wz] as [number, number, number], rot: a + 0.2 };
+    const plan = reseatRiders(before, after, [rider], { laptop: 'desk' }, [], footprintForLayout('rect', 5, 5), 2.5);
+    const [ex, ez] = at(b, 0.3, -0.1);
+    const move = plan.moves.find((m) => m.id === 'laptop')!;
+    expect(move.pos[0]).toBeCloseTo(0.4 + ex, 9);
+    expect(move.pos[2]).toBeCloseTo(-0.3 + ez, 9);
+    expect(move.rot).toBeCloseTo(b + 0.2, 9);
+  });
+
+  it('a rider that ends exactly where it stood gets no write', () => {
+    // A write is never free: it pins an override against a re-detect.
+    const plan = reseatRiders(desk, { ...desk, name: 'Desk 2' }, [monitor, laptop], { monitor: 'desk', laptop: 'desk' }, [], footprintForLayout('rect', 5, 5), 2.5);
+    expect(plan.moves).toEqual([]);
+    expect([...plan.seated].sort()).toEqual(['laptop', 'monitor']);
+  });
+
+  it('with no room outline to search, a rider that fits nowhere goes BESIDE the table, not under it', () => {
+    const after = { ...desk, category: 'table' as const, shape: 'side-table' as const, dimMM: [450, 450, 550] as [number, number, number] };
+    const plan = reseatRiders(desk, after, [monitor], { monitor: 'desk' }, [], undefined, 2.5);
+    expect(plan.grounded).toEqual(['monitor']);
+    const m = plan.moves.find((x) => x.id === 'monitor')!;
+    expect(m.pos[1]).toBe(0);
+    expect(footOverlap(foot({ ...monitor, pos: m.pos }), foot(after), -TOUCH_M)).toBe(false);
+  });
+
+  it('a banquet table of small things swapped for a stool decides in good time', () => {
+    // 40 coasters on a 3 × 2 m top swapped for a 420 mm stool; the rest search it and fail.
+    const big = { ...desk, dimMM: [3000, 2000, 750] as [number, number, number] };
+    const riders: ScenePart[] = [];
+    for (let i = 0; i < 8; i++) {
+      for (let j = 0; j < 5; j++) {
+        riders.push(part({ id: `c${i}-${j}`, pos: [-1.3 + i * 0.37, DESK_TOP, -0.8 + j * 0.4], dimMM: [200, 200, 100] }));
+      }
+    }
+    const relation = Object.fromEntries(riders.map((r) => [r.id, 'desk']));
+    const after = { ...big, dimMM: [420, 420, 450] as [number, number, number] };
+    let plan = reseatRiders(big, after, riders, relation, [], footprintForLayout('rect', 8, 8), 2.5);
+    expect(plan.seated.length + plan.grounded.length).toBe(40);
+    // Four 200 mm coasters need 400 mm plus a gap each side of the seam; the 20 mm grid
+    // finds room for three, which is the measured answer and pinned as one.
+    expect(plan.seated.length).toBe(3);
+    const ms = bestMs(() => { plan = reseatRiders(big, after, riders, relation, [], footprintForLayout('rect', 8, 8), 2.5); }, 1);
+    console.log(`swap-riders · 40 riders onto a stool: ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(ceilingMs(400));
+  });
+});
+
+describe('a crowded top decides in good time', () => {
+  it('forty 300 mm boxes onto a top with area for them but not the packing', () => {
+    // The case the quick refusals cannot shortcut: every box passes the area check until
+    // the top is nearly full, so the grid search runs for each that fails. At a fixed
+    // 20 mm grid with no near-test it took 2.3 s.
+    const big = { ...desk, dimMM: [3000, 2000, 750] as [number, number, number] };
+    const riders = Array.from({ length: 40 }, (_, i) => part({ id: `b${i}`, pos: [0, DESK_TOP, 0], dimMM: [300, 300, 100] }));
+    const relation = Object.fromEntries(riders.map((r) => [r.id, 'desk']));
+    const after = { ...big, dimMM: [2400, 1600, 750] as [number, number, number] };
+    let plan = reseatRiders(big, after, riders, relation, [], footprintForLayout('rect', 8, 8), 2.5);
+    // Measured: 35 seat and five go to the floor.
+    expect(plan.seated.length).toBe(35);
+    expect(plan.grounded.length).toBe(5);
+    const ms = bestMs(() => { plan = reseatRiders(big, after, riders, relation, [], footprintForLayout('rect', 8, 8), 2.5); }, 1);
+    console.log(`swap-riders · 40 boxes onto a crowded top: ${ms.toFixed(0)} ms`);
+    expect(ms).toBeLessThan(ceilingMs(700));
+  });
+});
+
+describe('a top too close to the ceiling holds nothing', () => {
+  it('a lamp on a nightstand swapped for a wardrobe goes to the floor, not into the wardrobe', () => {
+    const stand = part({ id: 'desk', name: 'Nightstand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
+    const lamp = part({ id: 'lamp', name: 'Table lamp', category: 'lamp', shape: 'lamp-table', pos: [0, 0.55, 0], dimMM: [250, 250, 500], circle: true });
+    setRoom([stand, lamp], { lamp: 'desk' });
+    const r = swapPartModel('desk', lib('Wardrobe'));
+    expect(r.ok && r.grounded).toEqual(['Table lamp']);
+    expect(r.ok && r.holds).toBe(true);
+    const l = live('lamp');
+    expect(l.pos[1]).toBe(0);
+    expect(footOverlap(foot(l), foot(live('desk')), -TOUCH_M)).toBe(false);
+  });
+
+  it('…while the same lamp swapped onto a desk stays on it — a round piece is held whole', () => {
+    // The pair that makes the wardrobe case about the ceiling: same lamp, a top it fits
+    // under. A round foot once read 0.6% short of "wholly on" against any top at all.
+    const stand = part({ id: 'desk', name: 'Nightstand', category: 'nightstand', shape: 'nightstand', dimMM: [450, 400, 550] });
+    const lamp = part({ id: 'lamp', name: 'Table lamp', category: 'lamp', shape: 'lamp-table', pos: [0, 0.55, 0], dimMM: [250, 250, 500], circle: true });
+    setRoom([stand, lamp], { lamp: 'desk' });
+    const r = swapPartModel('desk', lib('Desk'));
+    expect(r.ok && r.grounded).toEqual([]);
+    expect(live('lamp').pos[1]).toBeCloseTo(topOf(live('desk')), 9);
+    expect(useStudio.getState().parentIds.lamp).toBe('desk');
   });
 });

@@ -9,6 +9,7 @@ import { curtainCloth, CURTAIN_STACK_SHARE, type SoftMeshData } from '@/lib/soft
 import { moduleCount, MODULE_RANGE, PART_LIBRARY, type ScenePart } from '@/lib/scene-spec';
 import { buildSceneFile, parseSceneFile, sceneFileJson, sceneFileToRoom } from '@/lib/scene-file';
 import type { RoomData, Transforms } from '@/lib/storage';
+import { useScene } from '@/lib/scene-store';
 
 const PLEAT = MODULE_RANGE.curtain!;
 const xs = (m: SoftMeshData) => m.positions.filter((_, i) => i % 3 === 0);
@@ -79,5 +80,31 @@ describe('a room file carries whether a curtain is open', () => {
     if (!out.ok) throw new Error(out.error);
     expect(out.file.parts[0].curtainOpen).toBeUndefined();
     expect(out.dropped.some((s) => /curtainOpen/.test(s))).toBe(true);
+  });
+});
+
+describe('open belongs to curtains only', () => {
+  it('a curtain swapped for anything else forgets it was open', () => {
+    const row = PART_LIBRARY.find((r) => r.shape === 'curtain')!;
+    const c: ScenePart = { id: 'c', category: row.category, name: row.label, shape: 'curtain', pos: [0, 1.2, -1.9], rot: 0, dimMM: row.dimMM, locked: false, curtainOpen: true };
+    useScene.setState({ parts: [c] });
+    useScene.getState().updatePart('c', { name: 'Blind', shape: 'box' });
+    expect(useScene.getState().parts[0].curtainOpen).toBeUndefined();
+    // …while an edit that keeps it a curtain keeps it open.
+    useScene.setState({ parts: [c] });
+    useScene.getState().updatePart('c', { name: 'Linen curtain' });
+    expect(useScene.getState().parts[0].curtainOpen).toBe(true);
+  });
+
+  it('a file giving it as something other than true or false says so', () => {
+    const ROOM: RoomData = { id: 'room-1', createdAt: 1_700_000_000_000, name: 'Studio', layoutId: 'rect', width: 5, depth: 4, height: 2.6 };
+    const row = PART_LIBRARY.find((r) => r.shape === 'curtain')!;
+    const c: ScenePart = { id: 'c', category: row.category, name: row.label, shape: 'curtain', pos: [0, 1.2, -1.9], rot: 0, dimMM: row.dimMM, locked: false };
+    const text = sceneFileJson(buildSceneFile(ROOM, [c], { positions: {}, rotations: {}, dims: {} }, 1))
+      .replace('"shape": "curtain"', '"shape": "curtain", "curtainOpen": "yes"');
+    const out = parseSceneFile(text);
+    if (!out.ok) throw new Error(out.error);
+    expect(out.file.parts[0].curtainOpen).toBeUndefined();
+    expect(out.dropped.some((d) => /curtainOpen/.test(d))).toBe(true);
   });
 });

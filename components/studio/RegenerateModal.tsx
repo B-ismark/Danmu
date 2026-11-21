@@ -110,7 +110,14 @@ export function SwapModelHost() {
         // What stood on the old piece and has no room on the new one went to the floor
         // beside it. Said, because nobody asked for those pieces to move.
         if (result.ok && result.grounded.length > 0) {
-          toast({ title: `Moved to the floor: ${listNames(result.grounded)}`, message: `There wasn't room for ${result.grounded.length === 1 ? 'it' : 'them'} on the ${item.label.toLowerCase()}.` });
+          const them = result.grounded.length === 1 ? 'it' : 'them';
+          const why = result.holds
+            ? `There wasn't room for ${them} on the ${item.label.toLowerCase()}.`
+            : `Nothing stands on a ${item.label.toLowerCase()}.`;
+          // A piece that found no clear floor either is touching something: said, so the
+          // room check finding it later is not the first anyone hears of it.
+          const crowded = result.crowded.length > 0 ? ` ${listNames(result.crowded)} found no clear spot and touches what is next to it.` : '';
+          toast({ title: `Moved to the floor: ${listNames(result.grounded)}`, message: why + crowded });
         }
         close();
       }}
