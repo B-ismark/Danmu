@@ -13,7 +13,8 @@ import { currentRoomScene } from './room-scene';
 import { findSupportDetailed, groundY, heightForNewCeiling, ridesWall, seeksSurface, hangOnWall, snapToWall, wallAffinity } from './physics';
 import { containedXZ } from './layout-settle';
 import { placeArrival } from './duplicate-place';
-import { ridersOf } from './rider-height';
+import { riderRelation, ridersOf } from './rider-height';
+import { reseatRiders } from './swap-riders';
 import { isRoundPart, isWallMountedPart, type LibraryItem, type ScenePart } from './scene-spec';
 import { edgeProjection, footFromPart, outsideDeficit, polygonWinding } from './geometry';
 import { interiorPoint, polygonCentroid, type Footprint } from './footprint';
@@ -42,7 +43,13 @@ function ownWall(footprint: Footprint, part: ScenePart, x: number, z: number): n
  *  spot at either turn: it is not swapped, and the caller says so, because rule 2 is
  *  "say so, never silently resize it to fit" and a piece left through the plaster is
  *  the silent version of that. */
-export type SwapResult = { ok: true; turned: boolean } | { ok: false; refused: 'does-not-fit' } | { ok: false; refused: 'gone' };
+export type SwapResult = {
+  ok: true;
+  turned: boolean;
+  /** What stood on the piece and no longer fits on the new one, now on the floor
+   *  beside it — by name, for the caller to say. */
+  grounded: string[];
+} | { ok: false; refused: 'does-not-fit' } | { ok: false; refused: 'gone' };
 
 /** How far through the walls a floor piece may end and still count as inside: the
  *  float slack of containment, never a visible amount. */
@@ -182,6 +189,32 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
       }
     }
   }
+  // What stood on the old piece, re-seated on the new one or put on the floor
+  // (`lib/swap-riders.ts`). Planned against the scene as it stands, BEFORE any write.
+  const authored = useScene.getState().parts;
+  const riderIds = ridersOf(id, scene, authored, s.parentIds);
+  const company = scene.filter((p) => riderIds.has(p.id));
+  const riderPlan = company.length
+    ? reseatRiders(
+        part,
+        {
+          ...part,
+          name: item.label,
+          category: item.category,
+          shape: item.shape,
+          dimMM,
+          pos: [x, ny, z],
+          rot,
+          circle: isRoundPart(item.shape),
+          wallMounted,
+        },
+        company,
+        riderRelation(authored, s.parentIds),
+        scene.filter((p) => p.id !== id && !riderIds.has(p.id)),
+        room.footprint,
+        room.height,
+      )
+    : null;
   s.resetTransforms(id); // drop stale rotate/scale overrides (and any rigid-parenting link)
   // The name too — leaving it stale is how a swapped-in door kept its old "tall
   // mirror" identity, so hover and the Catalog showed a conflicting label.
@@ -196,5 +229,11 @@ export function swapPartModel(id: string, item: LibraryItem, dimOverride?: [numb
   // did not stop it resting on whatever it landed on.
   if (!wallMounted && support && support.y > 0.3) s.setParent(id, support.id);
   else s.clearParent(id);
-  return { ok: true, turned };
+  if (riderPlan) {
+    s.setTransformsFor(riderPlan.moves);
+    for (const r of riderPlan.seated) s.setParent(r, id);
+    for (const r of riderPlan.grounded) s.clearParent(r);
+  }
+  const grounded = (riderPlan?.grounded ?? []).map((r) => company.find((p) => p.id === r)?.name ?? r);
+  return { ok: true, turned, grounded };
 }

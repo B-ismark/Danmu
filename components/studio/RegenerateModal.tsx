@@ -72,6 +72,11 @@ export function SwapModelModal({
   );
 }
 
+/** "Monitor", "Monitor and Laptop", "Monitor, Lamp and Laptop". */
+function listNames(names: string[]): string {
+  return names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+}
+
 /** The one mount of the swap dialog on a room tab. The Inspector's button and the
  *  right-click menu both open it by naming the piece (`setSwapPartId`); a piece
  *  deleted or undone away while it is open closes it rather than swapping nothing. */
@@ -101,6 +106,11 @@ export function SwapModelHost() {
           toast({ title: `${item.label} doesn't fit here`, message: 'It would go through a wall at either turn, so the piece was kept as it was.' });
         } else if (result.ok && result.turned) {
           toast({ title: `${item.label} turned to fit`, message: 'It only fits here at a quarter turn.' });
+        }
+        // What stood on the old piece and has no room on the new one went to the floor
+        // beside it. Said, because nobody asked for those pieces to move.
+        if (result.ok && result.grounded.length > 0) {
+          toast({ title: `Moved to the floor: ${listNames(result.grounded)}`, message: `There wasn't room for ${result.grounded.length === 1 ? 'it' : 'them'} on the ${item.label.toLowerCase()}.` });
         }
         close();
       }}
