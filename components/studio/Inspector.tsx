@@ -360,6 +360,10 @@ export function Inspector() {
         <FinishControls part={part} onChange={(patch) => updatePart(id!, patch)} />
       )}
 
+      {part.shape === 'curtain' && (
+        <CurtainControls part={part} onChange={(curtainOpen) => updatePart(id!, { curtainOpen })} />
+      )}
+
       {isLightFixture(part.shape) && (
         <LightControls part={part} onChange={(light) => updatePart(id!, { light })} />
       )}
@@ -593,6 +597,33 @@ function BlockStyleControls({ part, onChange }: { part: ScenePart; onChange: (st
             </div>
           );
         })}
+      </div>
+    </Section>
+  );
+}
+
+/** Whether a curtain is drawn across its window or folded up, tied back at each end.
+ *  Drawn is the default and is stored as ABSENT, like a finish's default, so choosing it
+ *  again leaves the piece exactly as it was placed. Through `updatePart`, so it undoes. */
+function CurtainControls({ part, onChange }: { part: ScenePart; onChange: (open: true | undefined) => void }) {
+  const open = part.curtainOpen === true;
+  return (
+    <Section label="Curtain">
+      <div style={{ minWidth: 0 }}>
+        <Segmented<'drawn' | 'open'>
+          ariaLabel="Curtain"
+          options={[
+            { value: 'drawn', label: 'Closed' },
+            { value: 'open', label: 'Open' },
+          ]}
+          value={open ? 'open' : 'drawn'}
+          onChange={(v) => onChange(v === 'open' ? true : undefined)}
+          wrap
+          minItem={72}
+        />
+        <div className="t-hint" style={{ marginTop: 6 }}>
+          {open ? 'Folded up and tied back at each end.' : 'Drawn across the window.'}
+        </div>
       </div>
     </Section>
   );

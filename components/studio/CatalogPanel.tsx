@@ -47,10 +47,12 @@ export const STUDIO_CANVAS_ID = 'studio-canvas';
  *  (`.add-morph`, globals.css), so the two triggers read one flag and one motion.
  *  Both words are in the DOM and the button's `aria-label` carries the name, so
  *  they are `aria-hidden` rather than announced twice. */
-// The two triggers' one name, and the key beside it. The bubble shows the key ("(A)",
-// as `UndoRedo`'s "(Ctrl+Z)" does); the accessible name does not repeat it, because
-// `aria-keyshortcuts` is where a screen reader reads that from.
-export const ADD_TIP_KEY = 'A';
+// The two triggers' one name, and the key beside it. The bubble shows the key
+// ("(Shift+A)", as `UndoRedo`'s "(Ctrl+Z)" does); the accessible name does not repeat
+// it, because `aria-keyshortcuts` is where a screen reader reads that from.
+// Shift+A rather than a bare A, so a stray A over the room no longer throws a card
+// across it. Same chord as Blender's Add menu.
+export const ADD_TIP_KEY = 'Shift+A';
 export function addTriggerNames(open: boolean): { name: string; tip: string } {
   const name = open ? 'Close the Library' : 'Add from the Library';
   return { name, tip: `${name} (${ADD_TIP_KEY})` };
@@ -248,8 +250,10 @@ export function CatalogPanel({
   belowDay?: boolean;
 }) {
   const setOpen = useStudio((s) => s.setCatalogOpen);
-  // Hide interface (Ctrl/Cmd + backslash) puts the card away with the rest of the
-  // chrome — hidden, not closed, so it is open again with its search intact after.
+  // Hide interface (Ctrl/Cmd + backslash) closes the card with the rest of the chrome
+  // (`setInterfaceHidden`), but the Library can still be opened while the interface is
+  // hidden — Shift+A, or the Add pill beside "Show interface" — and then it shows.
+  // With the day strip and the top-right cluster gone, it docks at the top edge.
   const uiHidden = useStudio((s) => s.uiHidden);
   const phone = usePhoneStudio();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -294,7 +298,7 @@ export function CatalogPanel({
         // own height for exactly this; the fallback reproduces the old number for
         // the one frame before the ResizeObserver reports, and for a jsdom render
         // where there is no layout at all.
-        top: belowDay ? `calc(${DAY_ROW_BOTTOM} + 8px)` : 'calc(12px + var(--canvas-view-height, 30px) + 12px)',
+        top: uiHidden ? 12 : belowDay ? `calc(${DAY_ROW_BOTTOM} + 8px)` : 'calc(12px + var(--canvas-view-height, 30px) + 12px)',
         right: 12,
         // Stops short of the bottom-RIGHT corner, which is where the one canvas
         // aide lives — see `bottomGap` above.
@@ -303,7 +307,7 @@ export function CatalogPanel({
         // two thirds of a stacked layout's room, and you cannot drag a piece into
         // a room the panel you are dragging from is sitting on.
         width: 'min(268px, calc(100% - 24px))',
-        display: uiHidden ? 'none' : 'flex',
+        display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden',
         zIndex: 'var(--z-canvas-ui)',

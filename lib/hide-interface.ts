@@ -32,6 +32,9 @@ export const SHOWN_SAYS = 'Interface shown.';
 export function setInterfaceHidden(hidden: boolean): boolean {
   if (useStudio.getState().uiHidden === hidden) return hidden;
   useStudio.getState().setUiHidden(hidden);
+  // Hiding puts the Library away too, so the room is clear. It can be opened again
+  // while hidden (Shift+A, or the Add pill beside Show interface).
+  if (hidden && useStudio.getState().catalogOpen) useStudio.getState().setCatalogOpen(false);
   announce(hidden ? HIDDEN_SAYS : SHOWN_SAYS);
   return hidden;
 }

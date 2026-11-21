@@ -200,6 +200,7 @@ function carryStudioEdits(
   if (old.shape === fresh.shape) {
     if (old.decor !== undefined) out.decor = old.decor;
     if (old.light !== undefined) out.light = old.light;
+    if (old.curtainOpen) out.curtainOpen = true;
     if (was && now && fromRecord(was).label === fromRecord(now).label) out.name = old.name;
   }
   return out;

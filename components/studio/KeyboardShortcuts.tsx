@@ -710,12 +710,12 @@ export function KeyboardShortcuts() {
         }
       }
       switch (key) {
-        // A for Add: opens the Library, and closes it again. Bare, so Ctrl/Cmd+A —
-        // handled above, and returning — stays select-all. Alt/Shift-modified A is
-        // not ours either. Both tabs and the phone sheet: the catalog state is the
-        // store's, not a tab's.
+        // Shift+A for Add: opens the Library, and closes it again — also while the
+        // interface is hidden. Shift, so a bare A typed at the room by accident does
+        // nothing; Ctrl/Cmd+A is handled above and stays select-all; Alt is not ours.
+        // Both tabs and the phone sheet: the catalog state is the store's, not a tab's.
         case 'a':
-          if (e.altKey || e.shiftKey) break;
+          if (e.altKey || !e.shiftKey) break;
           e.preventDefault();
           s.setCatalogOpen(!s.catalogOpen);
           break;

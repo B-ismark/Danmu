@@ -37,7 +37,7 @@ export function EmptyInspector() {
         </span>
         <p className="empty-inspector__say">{touch ? 'Tap' : 'Click'} a piece to style it</p>
         <p className="t-small empty-inspector__hint">
-          {touch ? 'Or use Add to bring something in from the Library.' : 'Or press A to bring something in from the Library.'}
+          {touch ? 'Or use Add to bring something in from the Library.' : 'Or press Shift+A to bring something in from the Library.'}
         </p>
       </div>
       {(!phone || canStartOver) && (

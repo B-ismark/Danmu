@@ -15,7 +15,7 @@
 // width is a browser item (`docs/visual-check.md`).
 import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { render, screen, cleanup, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent, within } from '@testing-library/react';
 import { useStudio } from '@/lib/store';
 import { STUDIO_SURFACE_ID } from '@/components/studio/KeyboardShortcuts';
 import { STUDIO_CANVAS_ID } from '@/components/studio/CatalogPanel';
@@ -100,16 +100,26 @@ describe('on a laptop, rails beside the room', () => {
     expect(showButton()).toBeNull();
   });
 
-  it('puts an open Library card away too, and it is still open when the interface returns', () => {
+  it('puts an open Library away too, and the Library can still be opened while hidden', () => {
     useStudio.setState({ catalogOpen: true });
     render(<Studio />);
-    const card = () => screen.getByText('Library').closest('.ds-card') as HTMLElement;
-    expect(card().style.display).not.toBe('none');
+    const card = () => (screen.queryByText('Library')?.closest('.ds-card') ?? null) as HTMLElement | null;
+    expect(card()).not.toBeNull();
     hideKey();
-    expect(card().style.display).toBe('none');
-    expect(useStudio.getState().catalogOpen, 'hidden, not closed').toBe(true);
-    hideKey();
-    expect(card().style.display).not.toBe('none');
+    expect(useStudio.getState().catalogOpen, 'hiding closes the Library with the rest').toBe(false);
+    expect(card()).toBeNull();
+    // Shift+A over the room opens it while everything else stays away…
+    fireEvent.keyDown(surface(), { key: 'A', shiftKey: true });
+    expect(useStudio.getState().catalogOpen).toBe(true);
+    expect(useStudio.getState().uiHidden, 'the interface stays hidden').toBe(true);
+    expect(card()!.style.display).not.toBe('none');
+    // …and so does the Add pill beside Show interface, for a hand without a keyboard.
+    const pills = () => within(screen.getByRole('group', { name: 'Hidden interface' }));
+    fireEvent.click(pills().getByRole('button', { name: 'Close the Library' }));
+    expect(useStudio.getState().catalogOpen).toBe(false);
+    fireEvent.click(pills().getByRole('button', { name: 'Add from the Library' }));
+    expect(useStudio.getState().catalogOpen).toBe(true);
+    expect(card()!.style.display).not.toBe('none');
   });
 
   it('never remounts the room: the same canvas element before, during and after', () => {
